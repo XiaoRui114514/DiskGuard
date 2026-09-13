@@ -4,7 +4,9 @@ Windows 磁盘占用优化工具：**实时监控磁盘忙率，当"磁盘 0"持
 
 打包好的程序：`dist\DiskGuard.exe`（单文件、免安装、自带 .NET 运行时，v1.2.0 起约 **57 MB**，此前为 68 MB）
 
-![主界面](docs/ui-1.2.0.png)
+![主界面](docs/ui-1.3.0.png)
+
+![关于页](docs/ui-about.png)
 
 ---
 
@@ -133,10 +135,12 @@ CI（`.github/workflows/build.yml`）会在 Windows 上编译、跑一次采样�
 
 ## 7. 许可
 
-[MIT](LICENSE)。程序只调整目标进程的 IO/CPU 优先级与吞吐上限，不改注册表、不关服务、不杀进程；请自行评估在关键业务机器上使用的风险。
+作者 **Hison** —— 抖音 `XRuiiiiii` · 小红书 `xiaoruiaaa520`（程序内「关于」页可一键复制）。
+
+本项目以 [MIT](LICENSE) 许可开源。程序只调整目标进程的 IO/CPU 优先级与吞吐上限，不改注册表、不关服务、不杀进程；请自行评估在关键业务机器上使用的风险。
 
 更新记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 ---
 
-版本：1.2.0
+版本：1.3.0

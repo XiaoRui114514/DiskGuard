@@ -282,6 +282,71 @@
                     </StackPanel>
                 </Grid>
             </TabItem>
+
+            <TabItem Header="关于">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="4,4,4,12">
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="磁盘守护 DiskGuard" FontSize="20" FontWeight="SemiBold" Foreground="#111827" />
+                                <TextBlock x:Name="AboutVersionText" Margin="0,6,0,0" Foreground="#6B7280" Text="版本 --" />
+                                <TextBlock Margin="0,12,0,0" FontSize="15" FontWeight="SemiBold" Foreground="#1D4ED8" Text="by Hison" />
+                                <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#4B5563"
+                                           Text="实时监控磁盘忙率；当磁盘 0 持续繁忙时，自动对占用最高的可限速进程降优先级 / 限吞吐，磁盘空闲后自动还原，用来缓解打字、输入法与前台软件卡顿。" />
+                                <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#6B7280"
+                                           Text="单文件免安装，自带 .NET 运行时；建议以管理员身份运行以获得 ETW 精确统计。" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="作者与账号" />
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <TextBlock Style="{StaticResource FieldLabel}" Width="80" Text="作者" />
+                                    <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="Hison（Hison 制作）" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <TextBlock Style="{StaticResource FieldLabel}" Width="80" Text="抖音" />
+                                    <TextBlock x:Name="DouyinText" VerticalAlignment="Center" Foreground="#111827" Text="XRuiiiiii" />
+                                    <Button Content="复制" Margin="12,0,0,0" Padding="12,2" Click="OnCopyDouyinClicked" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource FieldLabel}" Width="80" Text="小红书" />
+                                    <TextBlock x:Name="XiaohongshuText" VerticalAlignment="Center" Foreground="#111827" Text="xiaoruiaaa520" />
+                                    <Button Content="复制" Margin="12,0,0,0" Padding="12,2" Click="OnCopyXiaohongshuClicked" />
+                                </StackPanel>
+                                <TextBlock x:Name="AboutCopyHint" Margin="0,10,0,0" Foreground="#059669" Text="" />
+                                <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#6B7280"
+                                           Text="使用中遇到问题或有建议，欢迎通过上面两个账号联系作者。" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="开源与致谢" />
+                                <TextBlock TextWrapping="Wrap" Foreground="#374151"
+                                           Text="本项目以 MIT 许可开源，欢迎自取源码、提交问题与改进。" />
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button x:Name="ProjectHomeButton" Content="打开项目主页（GitHub）" Click="OnOpenProjectHomeClicked" Visibility="Collapsed" />
+                                    <Button Content="打开配置目录" Margin="8,0,0,0" Click="OnOpenFolderClicked" />
+                                </StackPanel>
+                                <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#4B5563"
+                                           Text="第三方组件：Microsoft.Diagnostics.Tracing.TraceEvent（微软官方，MIT 许可），用于读取 ETW 内核磁盘事件。" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="使用边界与免责声明" />
+                                <TextBlock TextWrapping="Wrap" Foreground="#374151"
+                                           Text="程序只调整目标进程的磁盘 / CPU 优先级与磁盘吞吐上限，不改注册表、不关服务、不结束进程，任何限速都可随时还原（强杀本程序也会在下次启动时自动还原残留）。" />
+                                <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#374151"
+                                           Text="内核（System）IO、受保护进程（如部分杀毒软件）与硬盘自身回收不受本程序控制；请自行评估在关键业务机器上使用的风险。" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
         </TabControl>
     </DockPanel>
 </Window>

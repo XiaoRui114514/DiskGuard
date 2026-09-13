@@ -16,6 +16,9 @@ namespace DiskGuard.App;
 
 public partial class MainWindow : Window
 {
+    /// <summary>项目主页：发布到 GitHub 后把仓库地址填在这里，「关于」页就会出现"打开项目主页"按钮。</summary>
+    private const string ProjectUrl = "";
+
     private readonly GuardEngine _engine;
     private readonly AppSettings _settings;
     private readonly AppLogger _logger;
@@ -54,7 +57,10 @@ public partial class MainWindow : Window
         _engine.SnapshotProduced += OnSnapshot;
         _logger.EntryWritten += OnLogEntry;
 
-        VersionText.Text = "版本 " + (System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0");
+        string version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0";
+        VersionText.Text = "版本 " + version;
+        AboutVersionText.Text = $"版本 {version} · MIT 许可 · 单文件（自带 .NET 运行时）";
+        ProjectHomeButton.Visibility = ProjectUrl.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         PrivilegeText.Text = ElevationService.IsElevated
             ? "权限：管理员（完整功能）"
             : "权限：普通用户（系统进程无法限速，建议以管理员身份运行）";
@@ -349,6 +355,38 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             System.Windows.MessageBox.Show("打开目录失败：" + ex.Message, "磁盘守护", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void OnCopyDouyinClicked(object sender, RoutedEventArgs e) => CopyAccount(DouyinText.Text, "抖音号");
+
+    private void OnCopyXiaohongshuClicked(object sender, RoutedEventArgs e) => CopyAccount(XiaohongshuText.Text, "小红书号");
+
+    private void CopyAccount(string text, string label)
+    {
+        try
+        {
+            Clipboard.SetText(text);
+            AboutCopyHint.Text = $"已复制{label}：{text}";
+            _logger.Info($"已复制{label}：{text}");
+        }
+        catch (Exception ex)
+        {
+            AboutCopyHint.Text = $"复制失败：{ex.Message}";
+        }
+    }
+
+    private void OnOpenProjectHomeClicked(object sender, RoutedEventArgs e)
+    {
+        if (ProjectUrl.Length == 0) return;
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(ProjectUrl) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show("打开项目主页失败：" + ex.Message, "磁盘守护", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
