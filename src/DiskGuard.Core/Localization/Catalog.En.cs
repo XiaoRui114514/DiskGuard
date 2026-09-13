@@ -108,6 +108,12 @@ internal static partial class Catalog
         [LK.BtnSaveSettings] = "Save settings",
         [LK.BtnResetSettings] = "Restore defaults",
 
+        [LK.FirstRunTitle] = "Language",
+        [LK.FirstRunPrompt] = "Choose the interface language. You can change it later in Settings → Language.",
+        [LK.FirstRunDetectedFormat] = "Pre-selected from your system language: {0}",
+        [LK.BtnConfirm] = "OK",
+        [LK.BtnLater] = "Not now",
+
         [LK.AboutTitle] = "DiskGuard",
         [LK.AboutByAuthor] = "by Hison",
         [LK.AboutSummaryLine1] = "Monitors disk busy time in real time. When disk 0 stays busy it automatically lowers the priority of, or caps the throughput of, the most demanding process that can be throttled, and restores it once the disk is idle — easing stutter while typing, using the IME or running foreground apps.",

@@ -108,6 +108,12 @@ internal static partial class Catalog
         [LK.BtnSaveSettings] = "설정 저장",
         [LK.BtnResetSettings] = "기본값 복원",
 
+        [LK.FirstRunTitle] = "표시 언어",
+        [LK.FirstRunPrompt] = "표시 언어를 선택하세요. 나중에 ‘설정 → 표시 언어’에서 변경할 수 있습니다.",
+        [LK.FirstRunDetectedFormat] = "시스템 언어로 {0}을(를) 선택했습니다",
+        [LK.BtnConfirm] = "확인",
+        [LK.BtnLater] = "나중에",
+
         [LK.AboutTitle] = "DiskGuard",
         [LK.AboutByAuthor] = "by Hison",
         [LK.AboutSummaryLine1] = "디스크 사용률을 실시간으로 모니터링합니다. 디스크 0이 계속 사용 중이면 제한할 수 있는 프로세스 중 점유가 가장 높은 프로세스의 우선 순위를 낮추거나 처리량을 제한하고, 디스크가 한가해지면 자동으로 복원합니다. 타이핑, 입력기, 포그라운드 앱의 끊김을 줄이기 위한 기능입니다.",

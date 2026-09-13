@@ -108,6 +108,12 @@ internal static partial class Catalog
         [LK.BtnSaveSettings] = "設定を保存",
         [LK.BtnResetSettings] = "既定に戻す",
 
+        [LK.FirstRunTitle] = "表示言語",
+        [LK.FirstRunPrompt] = "表示言語を選択してください。あとから「設定 → 表示言語」で変更できます。",
+        [LK.FirstRunDetectedFormat] = "システム言語から {0} を選択しています",
+        [LK.BtnConfirm] = "OK",
+        [LK.BtnLater] = "後で",
+
         [LK.AboutTitle] = "DiskGuard",
         [LK.AboutByAuthor] = "by Hison",
         [LK.AboutSummaryLine1] = "ディスクのビジー率をリアルタイムで監視します。ディスク 0 がビジーな状態を続けると、制限できるプロセスのうち最も占有しているものの優先度を下げたりスループットを制限し、ディスクが空くと自動で元に戻します。入力や IME、前面アプリの引っかかりをやわらげるための仕組みです。",

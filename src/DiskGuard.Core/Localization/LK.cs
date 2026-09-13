@@ -114,6 +114,13 @@ public enum LK
     BtnSaveSettings,
     BtnResetSettings,
 
+    // —— 首次启动语言选择 ——
+    FirstRunTitle,
+    FirstRunPrompt,
+    FirstRunDetectedFormat,
+    BtnConfirm,
+    BtnLater,
+
     // —— 关于页 ——
     AboutTitle,
     AboutByAuthor,

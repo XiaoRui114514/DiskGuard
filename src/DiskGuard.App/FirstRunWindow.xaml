@@ -1,0 +1,31 @@
+<Window x:Class="DiskGuard.App.FirstRunWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:DiskGuard.App.Localization"
+        Title="{Binding [FirstRunTitle], Source={x:Static loc:LocSource.Instance}}"
+        Width="470" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        FontFamily="Microsoft YaHei UI, Segoe UI" FontSize="13" Background="#F3F5F9">
+
+    <StackPanel Margin="20,18,20,16">
+        <TextBlock Text="{Binding [FirstRunTitle], Source={x:Static loc:LocSource.Instance}}"
+                   FontSize="18" FontWeight="SemiBold" Foreground="#111827" />
+        <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#4B5563"
+                   Text="{Binding [FirstRunPrompt], Source={x:Static loc:LocSource.Instance}}" />
+
+        <ComboBox x:Name="LanguageCombo" Margin="0,14,0,0" Height="30"
+                  ItemsSource="{Binding Languages}" DisplayMemberPath="DisplayName"
+                  SelectedValuePath="Code" SelectedValue="{Binding SelectedCode, Mode=TwoWay}"
+                  SelectionChanged="OnLanguageChanged" />
+
+        <TextBlock x:Name="DetectedText" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#6B7280" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button Content="{Binding [BtnLater], Source={x:Static loc:LocSource.Instance}}"
+                    Padding="16,5" Click="OnLaterClicked" />
+            <Button Content="{Binding [BtnConfirm], Source={x:Static loc:LocSource.Instance}}"
+                    Padding="24,5" Margin="10,0,0,0" Background="#2563EB" Foreground="White"
+                    BorderBrush="#1D4ED8" Click="OnConfirmClicked" />
+        </StackPanel>
+    </StackPanel>
+</Window>

@@ -108,6 +108,12 @@ internal static partial class Catalog
         [LK.BtnSaveSettings] = "保存设置",
         [LK.BtnResetSettings] = "恢复默认设置",
 
+        [LK.FirstRunTitle] = "界面语言",
+        [LK.FirstRunPrompt] = "请选择界面语言，之后可随时在「设置 → 界面语言」中更改。",
+        [LK.FirstRunDetectedFormat] = "已按系统语言预选：{0}",
+        [LK.BtnConfirm] = "确定",
+        [LK.BtnLater] = "稍后再说",
+
         [LK.AboutTitle] = "磁盘守护 DiskGuard",
         [LK.AboutByAuthor] = "by Hison",
         [LK.AboutSummaryLine1] = "实时监控磁盘忙率；当磁盘 0 持续繁忙时，自动对占用最高的可限速进程降优先级 / 限吞吐，磁盘空闲后自动还原，用来缓解打字、输入法与前台软件卡顿。",

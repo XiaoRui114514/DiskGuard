@@ -108,6 +108,12 @@ internal static partial class Catalog
         [LK.BtnSaveSettings] = "儲存設定",
         [LK.BtnResetSettings] = "還原預設設定",
 
+        [LK.FirstRunTitle] = "介面語言",
+        [LK.FirstRunPrompt] = "請選擇介面語言，之後可隨時在「設定 → 介面語言」中變更。",
+        [LK.FirstRunDetectedFormat] = "已依系統語言預選：{0}",
+        [LK.BtnConfirm] = "確定",
+        [LK.BtnLater] = "稍後再說",
+
         [LK.AboutTitle] = "磁碟守護 DiskGuard",
         [LK.AboutByAuthor] = "by Hison",
         [LK.AboutSummaryLine1] = "即時監控磁碟忙碌率；當磁碟 0 持續忙碌時，自動對佔用最高的可限速處理程序降低優先順序 / 限制輸送量，磁碟閒置後自動還原，用來改善打字、輸入法與前景程式卡頓。",

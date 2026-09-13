@@ -108,6 +108,12 @@ internal static partial class Catalog
         [LK.BtnSaveSettings] = "حفظ الإعدادات",
         [LK.BtnResetSettings] = "استعادة الإعدادات الافتراضية",
 
+        [LK.FirstRunTitle] = "لغة الواجهة",
+        [LK.FirstRunPrompt] = "اختر لغة الواجهة، ويمكنك تغييرها لاحقًا من «الإعدادات ← لغة الواجهة».",
+        [LK.FirstRunDetectedFormat] = "تم الاختيار مبدئيًا حسب لغة النظام: {0}",
+        [LK.BtnConfirm] = "موافق",
+        [LK.BtnLater] = "لاحقًا",
+
         [LK.AboutTitle] = "DiskGuard",
         [LK.AboutByAuthor] = "by Hison",
         [LK.AboutSummaryLine1] = "يراقب انشغال القرص في الوقت الفعلي؛ وعندما يظل القرص 0 مشغولًا يخفض تلقائيًا أولوية العملية الأكثر إشغالًا التي يمكن تقييدها أو يحدّ من إنتاجيتها، ثم يعيدها إلى طبيعتها عند خلوّ القرص، للتخفيف من التقطيع أثناء الكتابة ولوحة المفاتيح والبرامج الأمامية.",

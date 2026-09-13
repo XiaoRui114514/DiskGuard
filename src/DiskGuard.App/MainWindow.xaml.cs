@@ -5,6 +5,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using DiskGuard.App.Services;
+using DiskGuard.App.Localization;
 using DiskGuard.App.ViewModels;
 using DiskGuard.Core.Config;
 using DiskGuard.Core.Engine;
@@ -73,8 +74,7 @@ public partial class MainWindow : Window
     private void ApplyLanguage(AppLanguage language)
     {
         Title = Loc.T(LK.AppTitle);
-        FontFamily = new System.Windows.Media.FontFamily(FontStackFor(language));
-        FlowDirection = Loc.IsRtl(language) ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
+        UiLanguage.Apply(this, language);
         _tray.ApplyLanguage();
 
         VersionText.Text = Loc.F(LK.VersionShortFormat, _version);
@@ -87,17 +87,6 @@ public partial class MainWindow : Window
         // 日志行的“级别”是按当前语言渲染的，切语言后重建一次列表
         RebuildLogList();
     }
-
-    /// <summary>按语言挑字体栈：优先该语言的原生 UI 字体，再回退到中文字体与 Segoe UI。</summary>
-    private static string FontStackFor(AppLanguage language) => language switch
-    {
-        AppLanguage.ZhHans => "Microsoft YaHei UI, Microsoft YaHei, Segoe UI",
-        AppLanguage.ZhHant => "Microsoft JhengHei UI, Microsoft JhengHei, Microsoft YaHei UI, Segoe UI",
-        AppLanguage.Ja => "Yu Gothic UI, Meiryo UI, Microsoft YaHei UI, Segoe UI",
-        AppLanguage.Ko => "Malgun Gothic, Microsoft YaHei UI, Segoe UI",
-        AppLanguage.Ar => "Segoe UI, Tahoma, Microsoft YaHei UI",
-        _ => "Segoe UI, Microsoft YaHei UI"
-    };
 
     private void OnSnapshot(EngineSnapshot snapshot)
     {

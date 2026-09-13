@@ -18,6 +18,9 @@ public partial class App : System.Windows.Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        // 还没有配置文件 = 首次运行：启动时问一次界面语言（默认按系统语言预选）
+        bool firstRun = !File.Exists(AppPaths.SettingsFile);
+
         // 先读设置并定下界面语言：单实例提示、异常弹窗、托盘日志都要用对语言
         var settings = AppSettings.Load(AppPaths.SettingsFile);
         Loc.SetLanguage(Loc.FromCode(settings.Language));
@@ -39,6 +42,18 @@ public partial class App : System.Windows.Application
                 MessageBoxButton.OK, MessageBoxImage.Error);
             args.Handled = true;
         };
+
+        if (firstRun)
+        {
+            var picker = new FirstRunWindow();
+            picker.ShowDialog();
+            if (!string.IsNullOrWhiteSpace(picker.ChosenCode))
+            {
+                // 用户在首次启动里确认了语言：写进配置，之后不再按系统语言走
+                settings.Language = picker.ChosenCode;
+                Loc.SetLanguage(Loc.FromCode(settings.Language));
+            }
+        }
 
         var logger = new AppLogger
         {
