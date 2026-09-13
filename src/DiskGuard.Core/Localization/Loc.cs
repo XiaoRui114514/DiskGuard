@@ -85,11 +85,15 @@ public static class Loc
     {
         try
         {
-            return FromCode(CultureInfo.CurrentUICulture.Name);
+            string name = CultureInfo.CurrentUICulture.Name;
+            // 读不到系统语言（未设置显示语言的系统 / 不变文化）时按英语兜底：
+            // 空串不能再回到 FromCode（那会递归回本方法），也不该让“检测不到”变成简中以外的意外结果。
+            if (string.IsNullOrWhiteSpace(name)) return AppLanguage.En;
+            return FromCode(name);
         }
         catch
         {
-            return AppLanguage.ZhHans;
+            return AppLanguage.En;
         }
     }
 

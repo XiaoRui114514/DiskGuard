@@ -9,7 +9,7 @@
     <AssemblyName>DiskGuard.Cli</AssemblyName>
     <RootNamespace>DiskGuard.Cli</RootNamespace>
     <InvariantGlobalization>false</InvariantGlobalization>
-    <Version>1.4.0</Version>
+    <Version>1.4.1</Version>
     <Product>磁盘守护 DiskGuard</Product>
   </PropertyGroup>
 
