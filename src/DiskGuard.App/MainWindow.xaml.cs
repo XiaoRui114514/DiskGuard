@@ -17,7 +17,7 @@ namespace DiskGuard.App;
 public partial class MainWindow : Window
 {
     /// <summary>项目主页：发布到 GitHub 后把仓库地址填在这里，「关于」页就会出现"打开项目主页"按钮。</summary>
-    private const string ProjectUrl = "";
+    private const string ProjectUrl = "https://github.com/XiaoRui114514/DiskGuard";
 
     private readonly GuardEngine _engine;
     private readonly AppSettings _settings;
