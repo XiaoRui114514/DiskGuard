@@ -1,8 +1,19 @@
 # 磁盘守护 DiskGuard
 
+![build](https://github.com/XiaoRui114514/DiskGuard/actions/workflows/build.yml/badge.svg)
+![release](https://img.shields.io/github/v/release/XiaoRui114514/DiskGuard?display_name=tag&sort=semver)
+![license](https://img.shields.io/github/license/XiaoRui114514/DiskGuard)
+
 Windows 磁盘占用优化工具：**实时监控磁盘忙率，当"磁盘 0"持续繁忙时，自动对当前磁盘占用最高的进程限速，磁盘空闲后自动还原**，以缓解打字、输入法、前台软件卡顿。
 
-打包好的程序：`dist\DiskGuard.exe`（单文件、免安装、自带 .NET 运行时，v1.2.0 起约 **57 MB**，此前为 68 MB）
+## ⬇️ 下载（不写代码的同学看这里）
+
+1. 打开 **[最新版本下载页](https://github.com/XiaoRui114514/DiskGuard/releases/latest)**
+2. 在页面下方 **Assets** 里点 **`DiskGuard.exe`**（单文件、免安装、自带 .NET 运行时，约 57 MB）
+3. 双击运行即可；建议右键「以管理员身份运行」，这样才能用上 ETW 精确统计
+
+> 为什么源码目录里没有 exe：57 MB 的二进制放进 Git 会让仓库每次发版都翻一倍体积，所以发行版统一放在 **Releases**（就是上面那个下载页）。
+> 自己编译的话看第 5 节，`dotnet publish -c Release` 一条命令就能生成同样的单文件。
 
 ![主界面](docs/ui-1.3.0.png)
 
