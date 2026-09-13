@@ -1,0 +1,21 @@
+# 构建输出
+[Bb]in/
+[Oo]bj/
+dist/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+*.user
+*.suo
+*.userprefs
+
+# 本地临时文件
+*.tmp
+tmp-*.txt
+*.log
+
+# 系统
+Thumbs.db
+desktop.ini
+.DS_Store

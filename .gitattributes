@@ -1,0 +1,13 @@
+# 统一换行，避免 Windows/Linux 协作时整文件 diff
+* text=auto
+
+*.cs      text diff=csharp
+*.xaml    text
+*.csproj  text
+*.sln     text eol=crlf
+*.ps1     text eol=crlf
+*.md      text
+
+*.ico     binary
+*.png     binary
+*.exe     binary

@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>DiskGuard.Core</AssemblyName>
+    <RootNamespace>DiskGuard.Core</RootNamespace>
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <Version>1.2.0</Version>
+    <Product>磁盘守护 DiskGuard</Product>
+  </PropertyGroup>
+
+  <!-- 发布时不带 PDB（否则会被一起复制进发布目录） -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.1.16" GeneratePathProperty="true" />
+  </ItemGroup>
+
+  <!--
+    TraceEvent 包默认会把三套架构的原生组件全部复制进发布目录（约 13 MB），其中：
+      · build/native/amd64/KernelTraceControl.dll —— ETW 内核会话必需（EnableKernelProvider 路径），保留；
+      · msdia140 / Dia2Lib / TraceReloggerLib —— 只用于 PDB 符号解析与 ETL 重写，DiskGuard 不使用；
+      · x86 / arm64 —— 本项目只发布 win-x64。
+  -->
+  <ItemGroup>
+    <None Remove="$(PkgMicrosoft_Diagnostics_Tracing_TraceEvent)\build\native\**\msdia140.dll" />
+    <None Remove="$(PkgMicrosoft_Diagnostics_Tracing_TraceEvent)\build\native\x86\**\*.dll" />
+    <None Remove="$(PkgMicrosoft_Diagnostics_Tracing_TraceEvent)\build\native\arm64\**\*.dll" />
+    <None Remove="$(PkgMicrosoft_Diagnostics_Tracing_TraceEvent)\lib\netstandard2.0\Dia2Lib.dll" />
+    <None Remove="$(PkgMicrosoft_Diagnostics_Tracing_TraceEvent)\lib\netstandard2.0\TraceReloggerLib.dll" />
+  </ItemGroup>
+
+</Project>

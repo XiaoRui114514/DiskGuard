@@ -1,0 +1,35 @@
+name: build
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    name: 构建 Windows 单文件 exe
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: 编译
+        run: dotnet build DiskGuard.sln -c Release
+
+      - name: 采样自检（CLI）
+        run: src\DiskGuard.Cli\bin\Release\net8.0-windows\DiskGuard.Cli.exe sample --seconds 3
+
+      - name: 发布单文件 exe
+        run: dotnet publish src\DiskGuard.App\DiskGuard.App.csproj -c Release -o dist
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: DiskGuard-win-x64
+          path: dist/DiskGuard.exe
+          if-no-files-found: error

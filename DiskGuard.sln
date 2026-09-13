@@ -1,0 +1,41 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{0E3604EC-8972-4DAE-86AD-049AB13092B6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DiskGuard.Core", "src\DiskGuard.Core\DiskGuard.Core.csproj", "{77F5880D-1C7D-4D13-BF24-3E1145EA2453}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DiskGuard.App", "src\DiskGuard.App\DiskGuard.App.csproj", "{D1EE20F8-C866-47D3-9D5A-71F77BCEA9B6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DiskGuard.Cli", "src\DiskGuard.Cli\DiskGuard.Cli.csproj", "{9E3212D2-09FC-40E7-88C5-948D3E22825E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{77F5880D-1C7D-4D13-BF24-3E1145EA2453}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{77F5880D-1C7D-4D13-BF24-3E1145EA2453}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{77F5880D-1C7D-4D13-BF24-3E1145EA2453}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{77F5880D-1C7D-4D13-BF24-3E1145EA2453}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D1EE20F8-C866-47D3-9D5A-71F77BCEA9B6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D1EE20F8-C866-47D3-9D5A-71F77BCEA9B6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D1EE20F8-C866-47D3-9D5A-71F77BCEA9B6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D1EE20F8-C866-47D3-9D5A-71F77BCEA9B6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9E3212D2-09FC-40E7-88C5-948D3E22825E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9E3212D2-09FC-40E7-88C5-948D3E22825E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9E3212D2-09FC-40E7-88C5-948D3E22825E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9E3212D2-09FC-40E7-88C5-948D3E22825E}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{77F5880D-1C7D-4D13-BF24-3E1145EA2453} = {0E3604EC-8972-4DAE-86AD-049AB13092B6}
+		{D1EE20F8-C866-47D3-9D5A-71F77BCEA9B6} = {0E3604EC-8972-4DAE-86AD-049AB13092B6}
+		{9E3212D2-09FC-40E7-88C5-948D3E22825E} = {0E3604EC-8972-4DAE-86AD-049AB13092B6}
+	EndGlobalSection
+EndGlobal

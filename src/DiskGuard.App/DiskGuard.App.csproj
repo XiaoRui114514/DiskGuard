@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>DiskGuard</AssemblyName>
+    <RootNamespace>DiskGuard.App</RootNamespace>
+    <ApplicationIcon>..\..\assets\DiskGuard.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Product>磁盘守护 DiskGuard</Product>
+    <AssemblyTitle>磁盘守护 DiskGuard</AssemblyTitle>
+    <Company>DiskGuard</Company>
+    <Version>1.2.0</Version>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <!--
+    发布默认参数写在这里，`dotnet publish -c Release` 即可产出与发行版一致的单文件 exe，
+    手工构建时不必再记一长串 -p: 参数（仍可用命令行覆盖）。
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <!-- 发行包不带 PDB -->
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DiskGuard.Core\DiskGuard.Core.csproj" />
+  </ItemGroup>
+
+  <!--
+    自包含发布时 SDK 会把 WindowsDesktop 框架整套（WPF + WinForms）都复制进发布目录，
+    即便项目是纯 WPF（自包含发布不做 Profile 过滤，这是 SDK 的已知行为，UseWindowsForms=false 也一样）。
+    下面按 FrameworkList.xml 中 Profile="WindowsForms"（即 WPF 用不到的那批）程序集，把它们从发布清单里去掉，
+    单文件包可再小约 7 MB。注意只剔除 WinForms 专属项，Profile 为 "WindowsForms;WPF" 的共用程序集（如
+    Accessibility、Microsoft.VisualBasic.Core、System.Drawing.Primitives）保持原样。
+  -->
+  <PropertyGroup>
+    <_UnusedWindowsFormsAssemblies>;Microsoft.VisualBasic;Microsoft.VisualBasic.Forms;System.Design;System.Drawing;System.Drawing.Common;System.Drawing.Design;System.Windows.Forms;System.Windows.Forms.Design;System.Windows.Forms.Design.Editors;System.Windows.Forms.Primitives;</_UnusedWindowsFormsAssemblies>
+    <_UnusedWindowsFormsResources>;Microsoft.VisualBasic.resources;Microsoft.VisualBasic.Forms.resources;System.Design.resources;System.Drawing.resources;System.Drawing.Common.resources;System.Drawing.Design.resources;System.Windows.Forms.resources;System.Windows.Forms.Design.resources;System.Windows.Forms.Design.Editors.resources;System.Windows.Forms.Primitives.resources;</_UnusedWindowsFormsResources>
+  </PropertyGroup>
+
+  <Target Name="TrimWindowsFormsProfileAssemblies" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <_UnusedWindowsFormsFile Include="@(ResolvedFileToPublish)"
+                               Condition="$(_UnusedWindowsFormsAssemblies.Contains(';%(Filename);')) Or $(_UnusedWindowsFormsResources.Contains(';%(Filename);'))" />
+    </ItemGroup>
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(_UnusedWindowsFormsFile)" />
+    </ItemGroup>
+  </Target>
+
+</Project>
