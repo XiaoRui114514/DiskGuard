@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using DiskGuard.Core.Localization;
 
 namespace DiskGuard.App.Services;
 
@@ -19,16 +20,16 @@ public static class AutoStartService
         var (exitCode, output) = Run("schtasks",
             $"/Create /TN \"{TaskName}\" /TR \"\\\"{executablePath}\\\"\" /SC ONLOGON /RL HIGHEST /F");
         return exitCode == 0
-            ? (true, "已开启开机自动启动（管理员权限，登录后静默启动）。")
-            : (false, "开启失败：" + output.Trim());
+            ? (true, Loc.T(LK.AutoStartEnabled))
+            : (false, Loc.F(LK.AutoStartEnableFailedFormat, output.Trim()));
     }
 
     public static (bool Ok, string Message) Disable()
     {
         var (exitCode, output) = Run("schtasks", $"/Delete /TN \"{TaskName}\" /F");
         return exitCode == 0
-            ? (true, "已关闭开机自动启动。")
-            : (false, "关闭失败：" + output.Trim());
+            ? (true, Loc.T(LK.AutoStartDisabled))
+            : (false, Loc.F(LK.AutoStartDisableFailedFormat, output.Trim()));
     }
 
     private static (int ExitCode, string Output) Run(string file, string arguments)
@@ -44,7 +45,7 @@ public static class AutoStartService
             };
 
             using var process = Process.Start(info);
-            if (process == null) return (-1, "无法启动命令");
+            if (process == null) return (-1, Loc.T(LK.AutoStartCannotLaunch));
 
             // 两个输出流必须同时异步读取：否则子进程输出较多时写满管道会一直等我们读，形成死锁
             var stdout = process.StandardOutput.ReadToEndAsync();
@@ -53,7 +54,7 @@ public static class AutoStartService
             if (!process.WaitForExit(15000))
             {
                 try { process.Kill(entireProcessTree: true); } catch { }
-                return (-1, "命令执行超时（15 秒），已放弃。");
+                return (-1, Loc.T(LK.AutoStartTimeout));
             }
 
             return (process.ExitCode, stdout.GetAwaiter().GetResult() + stderr.GetAwaiter().GetResult());

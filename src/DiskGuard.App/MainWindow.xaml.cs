@@ -8,6 +8,7 @@ using DiskGuard.App.Services;
 using DiskGuard.App.ViewModels;
 using DiskGuard.Core.Config;
 using DiskGuard.Core.Engine;
+using DiskGuard.Core.Localization;
 using DiskGuard.Core.Logging;
 using DiskGuard.Core.Monitoring;
 using DiskGuard.Core.Util;
@@ -31,6 +32,7 @@ public partial class MainWindow : Window
     private EngineSnapshot? _pendingSnapshot;
     private bool _snapshotQueued;
     private bool _trayPausedShown;
+    private string _version = "1.0.0";
 
     public ObservableCollection<ProcessRowVm> Rows { get; } = new();
     public ObservableCollection<LogRowVm> Logs { get; } = new();
@@ -51,27 +53,51 @@ public partial class MainWindow : Window
         _tray = new TrayIconService(message => _logger.Info(message));
         _tray.ShowWindowRequested += ShowFromTray;
         _tray.PauseToggleRequested += TogglePause;
-        _tray.ReleaseAllRequested += () => _engine.ReleaseTarget("托盘菜单：立即还原");
+        _tray.ReleaseAllRequested += () => _engine.ReleaseTarget(Loc.T(LK.ReasonTrayReleaseAll));
         _tray.ExitRequested += ExitApplication;
 
         _engine.SnapshotProduced += OnSnapshot;
         _logger.EntryWritten += OnLogEntry;
 
-        string version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0";
-        VersionText.Text = "版本 " + version;
-        AboutVersionText.Text = $"版本 {version} · MIT 许可 · 单文件（自带 .NET 运行时）";
+        _version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0";
         ProjectHomeButton.Visibility = ProjectUrl.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-        PrivilegeText.Text = ElevationService.IsElevated
-            ? "权限：管理员（完整功能）"
-            : "权限：普通用户（系统进程无法限速，建议以管理员身份运行）";
         ElevateButton.Visibility = ElevationService.IsElevated ? Visibility.Collapsed : Visibility.Visible;
 
-        foreach (var entry in _logger.Recent)
-            AddLog(entry);
+        ApplyLanguage(Loc.Current);
 
         if (settings.StartMinimized && settings.ShowBalloon)
-            _tray.ShowBalloon("磁盘守护已在后台运行", "已最小化到托盘并开始监控磁盘占用，右键托盘图标可打开主界面。");
+            _tray.ShowBalloon(Loc.T(LK.BalloonStartedTitle), Loc.T(LK.BalloonStartedBody));
     }
+
+    /// <summary>应用界面语言：窗口标题、字体、排版方向（阿拉伯语从右往左）、状态栏文本与日志列表。</summary>
+    private void ApplyLanguage(AppLanguage language)
+    {
+        Title = Loc.T(LK.AppTitle);
+        FontFamily = new System.Windows.Media.FontFamily(FontStackFor(language));
+        FlowDirection = Loc.IsRtl(language) ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
+        _tray.ApplyLanguage();
+
+        VersionText.Text = Loc.F(LK.VersionShortFormat, _version);
+        AboutVersionText.Text = Loc.F(LK.VersionFullFormat, _version);
+        PrivilegeText.Text = Loc.T(ElevationService.IsElevated ? LK.PrivilegeAdmin : LK.PrivilegeUser);
+
+        // 磁盘下拉框的显示名（“磁盘 0 (C: D:)”）是按语言现算的，清空后由下一次快照重建
+        DiskCombo.ItemsSource = null;
+
+        // 日志行的“级别”是按当前语言渲染的，切语言后重建一次列表
+        RebuildLogList();
+    }
+
+    /// <summary>按语言挑字体栈：优先该语言的原生 UI 字体，再回退到中文字体与 Segoe UI。</summary>
+    private static string FontStackFor(AppLanguage language) => language switch
+    {
+        AppLanguage.ZhHans => "Microsoft YaHei UI, Microsoft YaHei, Segoe UI",
+        AppLanguage.ZhHant => "Microsoft JhengHei UI, Microsoft JhengHei, Microsoft YaHei UI, Segoe UI",
+        AppLanguage.Ja => "Yu Gothic UI, Meiryo UI, Microsoft YaHei UI, Segoe UI",
+        AppLanguage.Ko => "Malgun Gothic, Microsoft YaHei UI, Segoe UI",
+        AppLanguage.Ar => "Segoe UI, Tahoma, Microsoft YaHei UI",
+        _ => "Segoe UI, Microsoft YaHei UI"
+    };
 
     private void OnSnapshot(EngineSnapshot snapshot)
     {
@@ -108,17 +134,19 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            _logger.Error("界面刷新失败：" + ex.Message);
+            _logger.Error(Loc.F(LK.LogUiRefreshFailedFormat, ex.Message));
         }
     }
 
     private void ApplySnapshotCore(EngineSnapshot snapshot)
     {
-        BusyText.Text = $"{snapshot.BusyPercent:0}%";
+        BusyText.Text = Loc.Value($"{snapshot.BusyPercent:0}%");
         BusyBar.Value = Math.Clamp(snapshot.BusyPercent, 0, 100);
-        DetailText.Text = $"队列 {snapshot.QueueLength:0.00} · 读 {ProcessUtil.FormatRate(snapshot.ReadBytesPerSec)} · 写 {ProcessUtil.FormatRate(snapshot.WriteBytesPerSec)}" +
-                          $" · 忙率 {snapshot.TriggerPercent:0}/{snapshot.RecoverPercent:0}%" +
-                          $" · 磁盘占用 {snapshot.TriggerOccupancyPercent:0}→{snapshot.TargetOccupancyPercent:0}%";
+        DetailText.Text = Loc.F(LK.DetailFormat,
+            snapshot.QueueLength, Loc.Value(ProcessUtil.FormatRate(snapshot.ReadBytesPerSec)),
+            Loc.Value(ProcessUtil.FormatRate(snapshot.WriteBytesPerSec)),
+            snapshot.TriggerPercent, snapshot.RecoverPercent,
+            snapshot.TriggerOccupancyPercent, snapshot.TargetOccupancyPercent);
 
         StateText.Text = snapshot.StateText;
         StateBadge.Background = snapshot.StateKind switch
@@ -140,20 +168,21 @@ public partial class MainWindow : Window
         {
             string level = snapshot.ActiveLevel switch
             {
-                3 => "强力模式（间歇挂起）",
-                2 => $"吞吐上限 {snapshot.ActiveCapBytesPerSec / 1024.0 / 1024.0:0.#} MB/s",
-                _ => "低优先级"
+                3 => Loc.T(LK.ThrottleLevelSuspend),
+                2 => Loc.F(LK.ThrottleLevelCapFormat, snapshot.ActiveCapBytesPerSec / 1024.0 / 1024.0),
+                _ => Loc.T(LK.ThrottleLevelPriority)
             };
-            TargetText.Text = $"正在限速：{snapshot.ActiveName} (PID {snapshot.ActivePid})\n" +
-                              $"方式：{level}，磁盘占用 {snapshot.ActiveOccupancyPercent:0.#}%（目标 {snapshot.TargetOccupancyPercent:0.#}%）\n" +
-                              $"当前速率 {ProcessUtil.FormatRate(snapshot.ActiveRateBytesPerSec)}";
+            TargetText.Text = Loc.F(LK.TargetThrottledFormat,
+                snapshot.ActiveName, snapshot.ActivePid, level,
+                snapshot.ActiveOccupancyPercent, snapshot.TargetOccupancyPercent,
+                Loc.Value(ProcessUtil.FormatRate(snapshot.ActiveRateBytesPerSec)));
         }
         else
         {
-            TargetText.Text = "当前未限速";
+            TargetText.Text = Loc.T(LK.TargetNone);
         }
 
-        PauseButton.Content = snapshot.Paused ? "恢复监控" : "暂停监控";
+        PauseButton.Content = Loc.T(snapshot.Paused ? LK.BtnResumeMonitor : LK.BtnPauseMonitor);
         if (_trayPausedShown != snapshot.Paused)
         {
             _trayPausedShown = snapshot.Paused;
@@ -220,6 +249,30 @@ public partial class MainWindow : Window
         while (Logs.Count > 300) Logs.RemoveAt(Logs.Count - 1);
     }
 
+    /// <summary>语言切换后按新语言重新渲染日志列表（消息本身保持写入时的语言）。</summary>
+    private void RebuildLogList()
+    {
+        Logs.Clear();
+        foreach (var entry in _logger.Recent) AddLog(entry);
+    }
+
+    private void OnLanguageChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (_applyingSettings) return;
+        if (LanguageCombo.SelectedValue is not string code) return;
+
+        AppLanguage language = Loc.FromCode(code);
+        string normalized = Loc.Code(language);
+        _settingsVm.Language = normalized;
+        if (Loc.Current == language) return;
+
+        Loc.SetLanguage(language);
+        _settings.Language = normalized;
+        _settings.Save(AppPaths.SettingsFile);
+        ApplyLanguage(language);
+        _logger.Info(Loc.F(LK.LogLanguageChangedFormat, Loc.NativeName(language)));
+    }
+
     private void OnDiskChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
         if (_applyingSettings) return;
@@ -242,19 +295,20 @@ public partial class MainWindow : Window
 
     private void OnReleaseClicked(object sender, RoutedEventArgs e)
     {
-        _engine.ReleaseTarget("手动解除");
+        _engine.ReleaseTarget(Loc.T(LK.ReasonManualRelease));
     }
 
     private void OnManualThrottleClicked(object sender, RoutedEventArgs e)
     {
         if (ProcessGrid.SelectedItem is not ProcessRowVm row)
         {
-            System.Windows.MessageBox.Show("请先在列表中选择一个进程。", "磁盘守护", MessageBoxButton.OK, MessageBoxImage.Information);
+            System.Windows.MessageBox.Show(Loc.T(LK.MsgSelectProcessFirst), Loc.T(LK.AppTitle),
+                MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
         if (!_engine.ManualThrottle(row.Pid, row.Name))
-            System.Windows.MessageBox.Show($"无法限速 {row.Name}（可能权限不足或属于系统关键进程）。", "磁盘守护",
+            System.Windows.MessageBox.Show(Loc.F(LK.MsgCannotThrottleFormat, row.Name), Loc.T(LK.AppTitle),
                 MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 
@@ -267,7 +321,7 @@ public partial class MainWindow : Window
         _settings.Whitelist.Add(name);
         _settings.Save(AppPaths.SettingsFile);
         _settingsVm.ReloadFrom(_settings);
-        _logger.Info($"已加入保护名单：{name}");
+        _logger.Info(Loc.F(LK.LogWhitelistAddedFormat, name));
     }
 
     private void OnWhitelistRemoveClicked(object sender, RoutedEventArgs e)
@@ -282,7 +336,7 @@ public partial class MainWindow : Window
         {
             _settings.Save(AppPaths.SettingsFile);
             _settingsVm.ReloadFrom(_settings);
-            _logger.Info($"已移出保护名单：{name}");
+            _logger.Info(Loc.F(LK.LogWhitelistRemovedFormat, name));
         }
     }
 
@@ -293,8 +347,9 @@ public partial class MainWindow : Window
         _engine.UpdateSettings(_settings);
         _logger.WriteToFile = _settings.WriteLogFile;
         _settingsVm.ReloadFrom(_settings);
-        _logger.Info("设置已保存并生效。");
-        System.Windows.MessageBox.Show("设置已保存并立即生效。", "磁盘守护", MessageBoxButton.OK, MessageBoxImage.Information);
+        _logger.Info(Loc.T(LK.LogSettingsSaved));
+        System.Windows.MessageBox.Show(Loc.T(LK.MsgSettingsSaved), Loc.T(LK.AppTitle),
+            MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     private void OnResetSettingsClicked(object sender, RoutedEventArgs e)
@@ -306,7 +361,7 @@ public partial class MainWindow : Window
         _settings.Save(AppPaths.SettingsFile);
         _engine.UpdateSettings(_settings);
         _logger.WriteToFile = _settings.WriteLogFile;
-        _logger.Info("已恢复默认设置。");
+        _logger.Info(Loc.T(LK.LogDefaultsRestored));
     }
 
     private async void OnAutoStartClicked(object sender, RoutedEventArgs e)
@@ -316,8 +371,8 @@ public partial class MainWindow : Window
         if (wanted && !ElevationService.IsElevated)
         {
             AutoStartCheck.IsChecked = false;
-            System.Windows.MessageBox.Show("开启开机自动启动需要管理员权限（计划任务）。点击「以管理员身份重启」后即可开启。",
-                "磁盘守护", MessageBoxButton.OK, MessageBoxImage.Information);
+            System.Windows.MessageBox.Show(Loc.T(LK.MsgAutoStartNeedsAdmin), Loc.T(LK.AppTitle),
+                MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
@@ -335,7 +390,7 @@ public partial class MainWindow : Window
         if (!result.Ok)
         {
             AutoStartCheck.IsChecked = _settings.AutoStart;
-            System.Windows.MessageBox.Show(result.Message, "磁盘守护", MessageBoxButton.OK, MessageBoxImage.Warning);
+            System.Windows.MessageBox.Show(result.Message, Loc.T(LK.AppTitle), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -354,25 +409,27 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            System.Windows.MessageBox.Show("打开目录失败：" + ex.Message, "磁盘守护", MessageBoxButton.OK, MessageBoxImage.Warning);
+            System.Windows.MessageBox.Show(Loc.F(LK.MsgOpenDirFailedFormat, ex.Message), Loc.T(LK.AppTitle),
+                MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
-    private void OnCopyDouyinClicked(object sender, RoutedEventArgs e) => CopyAccount(DouyinText.Text, "抖音号");
+    private void OnCopyDouyinClicked(object sender, RoutedEventArgs e) => CopyAccount(DouyinText.Text, LK.LabelDouyinId);
 
-    private void OnCopyXiaohongshuClicked(object sender, RoutedEventArgs e) => CopyAccount(XiaohongshuText.Text, "小红书号");
+    private void OnCopyXiaohongshuClicked(object sender, RoutedEventArgs e) => CopyAccount(XiaohongshuText.Text, LK.LabelXiaohongshuId);
 
-    private void CopyAccount(string text, string label)
+    private void CopyAccount(string text, LK labelKey)
     {
+        string label = Loc.T(labelKey);
         try
         {
             Clipboard.SetText(text);
-            AboutCopyHint.Text = $"已复制{label}：{text}";
-            _logger.Info($"已复制{label}：{text}");
+            AboutCopyHint.Text = Loc.F(LK.CopyOkFormat, label, text);
+            _logger.Info(Loc.F(LK.CopyOkFormat, label, text));
         }
         catch (Exception ex)
         {
-            AboutCopyHint.Text = $"复制失败：{ex.Message}";
+            AboutCopyHint.Text = Loc.F(LK.CopyFailedFormat, ex.Message);
         }
     }
 
@@ -386,7 +443,8 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            System.Windows.MessageBox.Show("打开项目主页失败：" + ex.Message, "磁盘守护", MessageBoxButton.OK, MessageBoxImage.Warning);
+            System.Windows.MessageBox.Show(Loc.F(LK.MsgOpenProjectFailedFormat, ex.Message), Loc.T(LK.AppTitle),
+                MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -412,7 +470,7 @@ public partial class MainWindow : Window
         // 托盘不可用时隐藏窗口会让程序再也打不开，此时直接退出更安全
         if (!_tray.IsAvailable)
         {
-            _logger.Warn("托盘图标不可用，关闭窗口时直接退出程序。");
+            _logger.Warn(Loc.T(LK.LogTrayUnavailableExit));
             ExitApplication();
             return;
         }
@@ -420,7 +478,7 @@ public partial class MainWindow : Window
         e.Cancel = true;
         Hide();
         if (_settings.ShowBalloon)
-            _tray.ShowBalloon("磁盘守护仍在运行", "程序已最小化到托盘，继续监控磁盘占用。");
+            _tray.ShowBalloon(Loc.T(LK.BalloonHiddenTitle), Loc.T(LK.BalloonHiddenBody));
     }
 
     private void ExitApplication()
@@ -433,7 +491,7 @@ public partial class MainWindow : Window
 
     private void ShutdownCore()
     {
-        try { _engine.ReleaseTarget("退出程序"); } catch { }
+        try { _engine.ReleaseTarget(Loc.T(LK.ReasonExit)); } catch { }
         try { _engine.Stop(); } catch { }
         try { _tray.Dispose(); } catch { }
         try { _logger.Dispose(); } catch { }   // 把队列里的日志写完

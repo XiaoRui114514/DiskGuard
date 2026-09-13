@@ -49,6 +49,9 @@ public sealed class AppSettings
     [JsonPropertyName("writeLogFile")] public bool WriteLogFile { get; set; } = true;
     [JsonPropertyName("showBalloon")] public bool ShowBalloon { get; set; } = true;
 
+    /// <summary>界面语言代码（zh-Hans / zh-Hant / en / ja / ko / ar）；留空表示跟随系统。</summary>
+    [JsonPropertyName("language")] public string Language { get; set; } = string.Empty;
+
     private static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = true,

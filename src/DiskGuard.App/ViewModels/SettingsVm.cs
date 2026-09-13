@@ -1,7 +1,15 @@
 using System.ComponentModel;
 using DiskGuard.Core.Config;
+using DiskGuard.Core.Localization;
 
 namespace DiskGuard.App.ViewModels;
+
+/// <summary>设置页语言下拉项（用母语名称显示，语言看不懂时也能找到自己的语言）。</summary>
+public sealed class LanguageOption
+{
+    public string Code { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+}
 
 /// <summary>设置界面的可绑定副本，保存时写回 AppSettings。</summary>
 public sealed class SettingsVm : INotifyPropertyChanged
@@ -30,6 +38,7 @@ public sealed class SettingsVm : INotifyPropertyChanged
     private bool _autoStart;
     private bool _writeLogFile;
     private bool _showBalloon;
+    private string _language = string.Empty;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -57,6 +66,12 @@ public sealed class SettingsVm : INotifyPropertyChanged
     public bool AutoStart { get => _autoStart; set => Set(ref _autoStart, value); }
     public bool WriteLogFile { get => _writeLogFile; set => Set(ref _writeLogFile, value); }
     public bool ShowBalloon { get => _showBalloon; set => Set(ref _showBalloon, value); }
+    public string Language { get => _language; set => Set(ref _language, value); }
+
+    /// <summary>可选语言列表（与 <see cref="Loc.Options"/> 一一对应）。</summary>
+    public IReadOnlyList<LanguageOption> Languages { get; } = Loc.Options
+        .Select(option => new LanguageOption { Code = option.Code, DisplayName = option.NativeName })
+        .ToList();
 
     public static SettingsVm From(AppSettings settings) => new()
     {
@@ -83,7 +98,8 @@ public sealed class SettingsVm : INotifyPropertyChanged
         StartMinimized = settings.StartMinimized,
         AutoStart = AutoStartChecked(settings),
         WriteLogFile = settings.WriteLogFile,
-        ShowBalloon = settings.ShowBalloon
+        ShowBalloon = settings.ShowBalloon,
+        Language = Loc.Code(Loc.FromCode(settings.Language))
     };
 
     private static bool AutoStartChecked(AppSettings settings) => settings.AutoStart;
@@ -113,6 +129,7 @@ public sealed class SettingsVm : INotifyPropertyChanged
         settings.AutoStart = AutoStart;
         settings.WriteLogFile = WriteLogFile;
         settings.ShowBalloon = ShowBalloon;
+        settings.Language = Language;
 
         settings.Whitelist = WhitelistText
             .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
@@ -149,6 +166,7 @@ public sealed class SettingsVm : INotifyPropertyChanged
         AutoStart = copy.AutoStart;
         WriteLogFile = copy.WriteLogFile;
         ShowBalloon = copy.ShowBalloon;
+        Language = copy.Language;
     }
 
     private void Set<T>(ref T field, T value, [System.Runtime.CompilerServices.CallerMemberName] string? name = null)

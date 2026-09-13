@@ -1,4 +1,5 @@
 using DiskGuard.Core.Interop;
+using DiskGuard.Core.Localization;
 
 namespace DiskGuard.Core.Throttling;
 
@@ -35,10 +36,10 @@ public static class ProcessPriorityReader
 
     public static string IoPriorityText(int value) => value switch
     {
-        0 => "极低",
-        1 => "低",
-        2 => "普通",
-        3 => "高",
-        _ => "未知"
+        0 => Loc.T(LK.IoLevelVeryLow),
+        1 => Loc.T(LK.IoLevelLow),
+        2 => Loc.T(LK.IoLevelNormal),
+        3 => Loc.T(LK.IoLevelHigh),
+        _ => Loc.T(LK.IoLevelUnknown)
     };
 }

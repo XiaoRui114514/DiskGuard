@@ -24,6 +24,9 @@ jobs:
       - name: 编译
         run: dotnet build DiskGuard.sln -c Release
 
+      - name: 校验六种界面语言的词条完整性
+        run: src\DiskGuard.Cli\bin\Release\net8.0-windows\DiskGuard.Cli.exe i18n
+
       - name: 采样自检（CLI）
         run: src\DiskGuard.Cli\bin\Release\net8.0-windows\DiskGuard.Cli.exe sample --seconds 3
 

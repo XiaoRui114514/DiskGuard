@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using DiskGuard.Core.Localization;
 
 namespace DiskGuard.Core.Logging;
 
@@ -16,7 +17,12 @@ public sealed class LogEntry
     public string Message { get; init; } = string.Empty;
 
     public string TimeText => Timestamp.ToString("HH:mm:ss");
-    public string LevelText => Level switch { LogLevel.Warn => "警告", LogLevel.Error => "错误", _ => "信息" };
+    public string LevelText => Level switch
+    {
+        LogLevel.Warn => Loc.T(LK.LogLevelWarn),
+        LogLevel.Error => Loc.T(LK.LogLevelError),
+        _ => Loc.T(LK.LogLevelInfo)
+    };
 }
 
 public sealed class AppLogger : IDisposable
@@ -118,7 +124,7 @@ public sealed class AppLogger : IDisposable
         var entry = new LogEntry
         {
             Level = LogLevel.Warn,
-            Message = $"日志文件写入失败（仅界面可见）：{ex.Message}"
+            Message = Loc.F(LK.LogLogFileWriteFailedFormat, ex.Message)
         };
 
         lock (_sync)

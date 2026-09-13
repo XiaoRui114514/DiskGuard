@@ -1,7 +1,9 @@
 using System.Runtime.InteropServices;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Threading;
+using DiskGuard.Core.Localization;
 
 namespace DiskGuard.App.Services;
 
@@ -34,6 +36,9 @@ public sealed class TrayIconService : IDisposable
     private readonly Action<string>? _log;
     private readonly ContextMenu _menu;
     private readonly MenuItem _pauseItem;
+    private readonly MenuItem _showItem;
+    private readonly MenuItem _releaseItem;
+    private readonly MenuItem _exitItem;
     private readonly WndProcDelegate _wndProc;          // 必须保持引用，否则委托会被 GC 回收
     private readonly List<IntPtr> _ownedIcons = new();
     private readonly uint _taskbarCreatedMessage;
@@ -43,6 +48,7 @@ public sealed class TrayIconService : IDisposable
     private IntPtr _hIcon = IntPtr.Zero;
     private bool _iconAdded;
     private bool _disposed;
+    private bool _paused;
 
     public event Action? ShowWindowRequested;
     public event Action? ExitRequested;
@@ -56,24 +62,24 @@ public sealed class TrayIconService : IDisposable
     {
         _log = log;
 
-        _pauseItem = new MenuItem { Header = "暂停监控" };
+        _pauseItem = new MenuItem { Header = Loc.T(LK.TrayPauseMonitor) };
         _pauseItem.Click += (_, _) => PauseToggleRequested?.Invoke();
 
-        var showItem = new MenuItem { Header = "显示主窗口" };
-        showItem.Click += (_, _) => ShowWindowRequested?.Invoke();
+        _showItem = new MenuItem { Header = Loc.T(LK.TrayShowWindow) };
+        _showItem.Click += (_, _) => ShowWindowRequested?.Invoke();
 
-        var releaseItem = new MenuItem { Header = "立即还原全部限速" };
-        releaseItem.Click += (_, _) => ReleaseAllRequested?.Invoke();
+        _releaseItem = new MenuItem { Header = Loc.T(LK.TrayReleaseAll) };
+        _releaseItem.Click += (_, _) => ReleaseAllRequested?.Invoke();
 
-        var exitItem = new MenuItem { Header = "退出" };
-        exitItem.Click += (_, _) => ExitRequested?.Invoke();
+        _exitItem = new MenuItem { Header = Loc.T(LK.TrayExit) };
+        _exitItem.Click += (_, _) => ExitRequested?.Invoke();
 
         _menu = new ContextMenu { Placement = PlacementMode.MousePoint };
-        _menu.Items.Add(showItem);
+        _menu.Items.Add(_showItem);
         _menu.Items.Add(_pauseItem);
-        _menu.Items.Add(releaseItem);
+        _menu.Items.Add(_releaseItem);
         _menu.Items.Add(new Separator());
-        _menu.Items.Add(exitItem);
+        _menu.Items.Add(_exitItem);
         _menu.Closed += (_, _) => PostMessageW(_hwnd, WM_NULL, IntPtr.Zero, IntPtr.Zero);
 
         _wndProc = WndProc;
@@ -87,7 +93,7 @@ public sealed class TrayIconService : IDisposable
         }
         catch (Exception ex)
         {
-            _log?.Invoke("托盘初始化失败：" + ex.Message);
+            _log?.Invoke(Loc.F(LK.LogTrayInitFailedFormat, ex.Message));
         }
 
         // 资源管理器尚未就绪时 NIM_ADD 会失败，稍后自动重试
@@ -96,7 +102,32 @@ public sealed class TrayIconService : IDisposable
 
     public void SetPaused(bool paused)
     {
-        _pauseItem.Header = paused ? "恢复监控" : "暂停监控";
+        _paused = paused;
+        _pauseItem.Header = Loc.T(paused ? LK.TrayResumeMonitor : LK.TrayPauseMonitor);
+    }
+
+    /// <summary>语言切换后刷新托盘菜单与图标提示。</summary>
+    public void ApplyLanguage()
+    {
+        _showItem.Header = Loc.T(LK.TrayShowWindow);
+        _pauseItem.Header = Loc.T(_paused ? LK.TrayResumeMonitor : LK.TrayPauseMonitor);
+        _releaseItem.Header = Loc.T(LK.TrayReleaseAll);
+        _exitItem.Header = Loc.T(LK.TrayExit);
+        _menu.FlowDirection = Loc.IsRightToLeft ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
+
+        if (!_iconAdded || _hwnd == IntPtr.Zero) return;
+
+        try
+        {
+            var data = CreateIconData();
+            data.uFlags = NIF_TIP;
+            data.szTip = Loc.T(LK.AppTitle);
+            Shell_NotifyIconW(NIM_MODIFY, ref data);
+        }
+        catch
+        {
+            // 改提示文字失败不影响主流程
+        }
     }
 
     public void ShowBalloon(string title, string message)
@@ -143,17 +174,17 @@ public sealed class TrayIconService : IDisposable
         data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
         data.uCallbackMessage = WM_TRAY_CALLBACK;
         data.hIcon = _hIcon;
-        data.szTip = "磁盘守护 DiskGuard";
+        data.szTip = Loc.T(LK.AppTitle);
 
         if (Shell_NotifyIconW(NIM_ADD, ref data))
         {
             _iconAdded = true;
-            _log?.Invoke("托盘图标已就绪（右键可暂停监控 / 还原限速 / 退出）。");
+            _log?.Invoke(Loc.T(LK.LogTrayReady));
         }
         else
         {
             _iconAdded = false;
-            _log?.Invoke("托盘图标创建失败，3 秒后自动重试。");
+            _log?.Invoke(Loc.T(LK.LogTrayCreateFailed));
         }
     }
 
@@ -198,7 +229,7 @@ public sealed class TrayIconService : IDisposable
         }
         catch (Exception ex)
         {
-            _log?.Invoke("托盘消息处理失败：" + ex.Message);
+            _log?.Invoke(Loc.F(LK.LogTrayMessageFailedFormat, ex.Message));
         }
 
         return DefWindowProcW(hWnd, msg, wParam, lParam);

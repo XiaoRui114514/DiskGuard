@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Windows;
 using DiskGuard.Core.Interop;
+using DiskGuard.Core.Localization;
 
 namespace DiskGuard.App.Services;
 
@@ -25,7 +26,7 @@ public static class ElevationService
         }
         catch (Exception ex)
         {
-            System.Windows.MessageBox.Show("以管理员身份重启失败：" + ex.Message, "磁盘守护",
+            System.Windows.MessageBox.Show(Loc.F(LK.MsgRestartElevatedFailedFormat, ex.Message), Loc.T(LK.AppTitle),
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return false;
         }

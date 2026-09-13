@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using DiskGuard.Core.Interop;
+using DiskGuard.Core.Localization;
 
 namespace DiskGuard.Core.Monitoring;
 
@@ -11,13 +12,13 @@ public sealed class IoCountersProcessIoSource : IProcessIoSource
 {
     private readonly Dictionary<int, (ulong Read, ulong Write, ulong ReadOps, ulong WriteOps)> _last = new();
 
-    public string Mode => "进程 IO 计数器（近似统计，含网络 IO）";
+    public string Mode => Loc.T(LK.IoModeCounters);
 
     public bool IsPrecise => false;
 
     public bool ProvidesServiceTime => false;
 
-    public string ShareMetricName => "字节占比（近似）";
+    public string ShareMetricName => Loc.T(LK.MetricBytesApprox);
 
     public IReadOnlyList<ProcessIoSample> Snapshot(double elapsedSeconds)
     {

@@ -1,8 +1,9 @@
 <Window x:Class="DiskGuard.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="磁盘守护 DiskGuard" Height="760" Width="1100" MinHeight="640" MinWidth="960"
-        FontFamily="Microsoft YaHei UI" FontSize="13" Background="#F3F5F9"
+        xmlns:loc="clr-namespace:DiskGuard.App.Localization"
+        Title="DiskGuard" Height="760" Width="1100" MinHeight="640" MinWidth="960"
+        FontFamily="Microsoft YaHei UI, Segoe UI" FontSize="13" Background="#F3F5F9"
         WindowStartupLocation="CenterScreen" Closing="OnWindowClosing">
 
     <Window.Resources>
@@ -21,9 +22,10 @@
             <Setter Property="Margin" Value="0,0,0,10" />
         </Style>
         <Style x:Key="FieldLabel" TargetType="TextBlock">
-            <Setter Property="Width" Value="170" />
+            <Setter Property="Width" Value="190" />
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Foreground" Value="#374151" />
+            <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
         <Style TargetType="Button">
             <Setter Property="Padding" Value="12,5" />
@@ -51,7 +53,7 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,28,0">
-                    <TextBlock Text="监控磁盘" Foreground="#6B7280" FontSize="12" />
+                    <TextBlock Text="{Binding [LabelMonitorDisk], Source={x:Static loc:LocSource.Instance}}" Foreground="#6B7280" FontSize="12" />
                     <ComboBox x:Name="DiskCombo" Width="200" Margin="0,6,0,0"
                               DisplayMemberPath="DisplayName" SelectionChanged="OnDiskChanged" />
                 </StackPanel>
@@ -59,20 +61,20 @@
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock x:Name="BusyText" Text="--" FontSize="40" FontWeight="SemiBold" Foreground="#1F2937" />
-                        <TextBlock Text="磁盘忙率" Margin="10,0,0,8" Foreground="#6B7280" VerticalAlignment="Bottom" />
+                        <TextBlock Text="{Binding [LabelDiskBusy], Source={x:Static loc:LocSource.Instance}}" Margin="10,0,0,8" Foreground="#6B7280" VerticalAlignment="Bottom" />
                         <Border x:Name="StateBadge" Margin="24,0,0,10" Padding="10,4" CornerRadius="12" Background="#E8F1FF" VerticalAlignment="Bottom">
-                            <TextBlock x:Name="StateText" Text="监控中" Foreground="#1D4ED8" />
+                            <TextBlock x:Name="StateText" Text="{Binding [StateMonitoring], Source={x:Static loc:LocSource.Instance}}" Foreground="#1D4ED8" />
                         </Border>
                     </StackPanel>
                     <ProgressBar x:Name="BusyBar" Height="10" Margin="0,6,120,0" Maximum="100" Foreground="#2563EB" Background="#E5E7EB" />
-                    <TextBlock x:Name="DetailText" Margin="0,8,0,0" Foreground="#6B7280" Text="队列 -- · 读 -- · 写 --" />
+                    <TextBlock x:Name="DetailText" Margin="0,8,0,0" Foreground="#6B7280" Text="--" />
                 </StackPanel>
 
-                <StackPanel Grid.Column="2" VerticalAlignment="Center" MinWidth="230">
-                    <TextBlock x:Name="TargetText" Text="当前未限速" Foreground="#374151" TextAlignment="Right" TextWrapping="Wrap" />
+                <StackPanel Grid.Column="2" VerticalAlignment="Center" MinWidth="290">
+                    <TextBlock x:Name="TargetText" Text="{Binding [TargetNone], Source={x:Static loc:LocSource.Instance}}" Foreground="#374151" TextAlignment="Right" TextWrapping="Wrap" />
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
-                        <Button x:Name="PauseButton" Content="暂停监控" Width="100" Height="30" Click="OnPauseClicked" />
-                        <Button Content="立即还原" Width="100" Height="30" Margin="8,0,0,0" Click="OnReleaseClicked" />
+                        <Button x:Name="PauseButton" Content="{Binding [BtnPauseMonitor], Source={x:Static loc:LocSource.Instance}}" Width="140" Height="30" Click="OnPauseClicked" />
+                        <Button Content="{Binding [BtnReleaseNow], Source={x:Static loc:LocSource.Instance}}" Width="140" Height="30" Margin="8,0,0,0" Click="OnReleaseClicked" />
                     </StackPanel>
                 </StackPanel>
             </Grid>
@@ -82,16 +84,16 @@
         <Border DockPanel.Dock="Bottom" Height="32" Background="#EDF0F6" BorderBrush="#E3E7EF" BorderThickness="0,1,0,0">
             <DockPanel Margin="14,0">
                 <TextBlock x:Name="VersionText" DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="#6B7280" Margin="12,0,0,0" />
-                <Button x:Name="ElevateButton" DockPanel.Dock="Right" Content="以管理员身份重启" Padding="8,2" Margin="12,4,0,4"
+                <Button x:Name="ElevateButton" DockPanel.Dock="Right" Content="{Binding [BtnRestartElevated], Source={x:Static loc:LocSource.Instance}}" Padding="8,2" Margin="12,4,0,4"
                         VerticalAlignment="Center" Click="OnElevateClicked" />
-                <Button x:Name="OpenFolderButton" DockPanel.Dock="Right" Content="打开配置目录" Padding="8,2" Margin="12,4,0,4"
+                <Button x:Name="OpenFolderButton" DockPanel.Dock="Right" Content="{Binding [BtnOpenConfigDir], Source={x:Static loc:LocSource.Instance}}" Padding="8,2" Margin="12,4,0,4"
                         VerticalAlignment="Center" Click="OnOpenFolderClicked" />
-                <TextBlock x:Name="PrivilegeText" VerticalAlignment="Center" Foreground="#4B5563" Text="权限：--" />
+                <TextBlock x:Name="PrivilegeText" VerticalAlignment="Center" Foreground="#4B5563" Text="--" />
             </DockPanel>
         </Border>
 
         <TabControl Margin="14,12,14,12">
-            <TabItem Header="进程与限速">
+            <TabItem Header="{Binding [TabProcess], Source={x:Static loc:LocSource.Instance}}">
                 <Grid Margin="4">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -100,7 +102,7 @@
                     </Grid.RowDefinitions>
 
                     <TextBlock Grid.Row="0" Margin="0,4,0,8" Foreground="#6B7280"
-                               Text="按「磁盘占用」排序（该进程让磁盘忙碌的时间占比，每秒刷新）。带「已限速」标记的是被降速的进程。" />
+                               Text="{Binding [HintProcessList], Source={x:Static loc:LocSource.Instance}}" TextWrapping="Wrap" />
 
                     <DataGrid x:Name="ProcessGrid" Grid.Row="1" ItemsSource="{Binding Rows}"
                               AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
@@ -108,122 +110,145 @@
                               CanUserAddRows="False" CanUserDeleteRows="False" RowHeight="28"
                               Background="White" BorderBrush="#E3E7EF" BorderThickness="1">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="进程" Binding="{Binding Name}" Width="230" />
-                            <DataGridTextColumn Header="PID" Binding="{Binding Pid}" Width="80" />
-                            <DataGridTextColumn Header="磁盘占用" Binding="{Binding OccupancyText}" Width="100" />
-                            <DataGridTextColumn Header="合计" Binding="{Binding RateText}" Width="120" />
-                            <DataGridTextColumn Header="读" Binding="{Binding ReadText}" Width="120" />
-                            <DataGridTextColumn Header="写" Binding="{Binding WriteText}" Width="120" />
-                            <DataGridTextColumn Header="状态" Binding="{Binding Tag}" Width="*" />
+                            <DataGridTextColumn Header="{Binding [ColProcess], Source={x:Static loc:LocSource.Instance}}" Binding="{Binding Name}" Width="230" />
+                            <DataGridTextColumn Header="{Binding [ColPid], Source={x:Static loc:LocSource.Instance}}" Binding="{Binding Pid}" Width="80" />
+                            <DataGridTextColumn Header="{Binding [ColOccupancy], Source={x:Static loc:LocSource.Instance}}" Binding="{Binding OccupancyText}" Width="100" />
+                            <DataGridTextColumn Header="{Binding [ColTotal], Source={x:Static loc:LocSource.Instance}}" Binding="{Binding RateText}" Width="120" />
+                            <DataGridTextColumn Header="{Binding [ColRead], Source={x:Static loc:LocSource.Instance}}" Binding="{Binding ReadText}" Width="120" />
+                            <DataGridTextColumn Header="{Binding [ColWrite], Source={x:Static loc:LocSource.Instance}}" Binding="{Binding WriteText}" Width="120" />
+                            <DataGridTextColumn Header="{Binding [ColStatus], Source={x:Static loc:LocSource.Instance}}" Binding="{Binding Tag}" Width="*" />
                         </DataGrid.Columns>
                     </DataGrid>
 
                     <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,10,0,0">
-                        <Button Content="立即限速选中进程" Click="OnManualThrottleClicked" />
-                        <Button Content="解除当前限速" Margin="8,0,0,0" Click="OnReleaseClicked" />
-                        <Button Content="加入保护名单" Margin="8,0,0,0" Click="OnWhitelistAddClicked" />
-                        <Button Content="移出保护名单" Margin="8,0,0,0" Click="OnWhitelistRemoveClicked" />
+                        <Button Content="{Binding [BtnThrottleSelected], Source={x:Static loc:LocSource.Instance}}" Click="OnManualThrottleClicked" />
+                        <Button Content="{Binding [BtnReleaseCurrent], Source={x:Static loc:LocSource.Instance}}" Margin="8,0,0,0" Click="OnReleaseClicked" />
+                        <Button Content="{Binding [BtnAddWhitelist], Source={x:Static loc:LocSource.Instance}}" Margin="8,0,0,0" Click="OnWhitelistAddClicked" />
+                        <Button Content="{Binding [BtnRemoveWhitelist], Source={x:Static loc:LocSource.Instance}}" Margin="8,0,0,0" Click="OnWhitelistRemoveClicked" />
                     </StackPanel>
                 </Grid>
             </TabItem>
 
-            <TabItem Header="设置">
+            <TabItem Header="{Binding [TabSettings], Source={x:Static loc:LocSource.Instance}}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4">
                     <StackPanel>
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource SectionTitle}" Text="触发条件" />
-                                <TextBlock Margin="0,0,0,8" Foreground="#6B7280" TextWrapping="Wrap"
-                                           Text="当监控磁盘的忙率持续高于触发阈值时，程序会限速当前占用最高的可限速进程；忙率回落到恢复阈值后自动还原。" />
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardInterface], Source={x:Static loc:LocSource.Instance}}" />
                                 <StackPanel Orientation="Horizontal" Margin="0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="触发忙率阈值（%）" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelLanguage], Source={x:Static loc:LocSource.Instance}}" />
+                                    <ComboBox x:Name="LanguageCombo" Width="200"
+                                              ItemsSource="{Binding Settings.Languages}" DisplayMemberPath="DisplayName"
+                                              SelectedValuePath="Code"
+                                              SelectedValue="{Binding Settings.Language, Mode=TwoWay}"
+                                              SelectionChanged="OnLanguageChanged" />
+                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#9CA3AF"
+                                               Text="{Binding [HintInterface], Source={x:Static loc:LocSource.Instance}}" TextWrapping="Wrap" MaxWidth="520" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardTrigger], Source={x:Static loc:LocSource.Instance}}" />
+                                <TextBlock Margin="0,0,0,8" Foreground="#6B7280" TextWrapping="Wrap"
+                                           Text="{Binding [HintTrigger], Source={x:Static loc:LocSource.Instance}}" />
+                                <StackPanel Orientation="Horizontal" Margin="0,4">
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelTriggerPercent], Source={x:Static loc:LocSource.Instance}}" />
                                     <TextBox Width="90" Text="{Binding Settings.TriggerPercent, UpdateSourceTrigger=PropertyChanged}" />
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="需持续（秒）" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelTriggerSeconds], Source={x:Static loc:LocSource.Instance}}" />
                                     <TextBox Width="90" Text="{Binding Settings.TriggerSeconds, UpdateSourceTrigger=PropertyChanged}" />
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="恢复忙率阈值（%）" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelRecoverPercent], Source={x:Static loc:LocSource.Instance}}" />
                                     <TextBox Width="90" Text="{Binding Settings.RecoverPercent, UpdateSourceTrigger=PropertyChanged}" />
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="恢复需持续（秒）" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelRecoverSeconds], Source={x:Static loc:LocSource.Instance}}" />
                                     <TextBox Width="90" Text="{Binding Settings.RecoverSeconds, UpdateSourceTrigger=PropertyChanged}" />
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="触发磁盘占用（%）" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelTriggerOccupancy], Source={x:Static loc:LocSource.Instance}}" />
                                     <TextBox Width="90" Text="{Binding Settings.TriggerOccupancyPercent, UpdateSourceTrigger=PropertyChanged}" />
-                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#9CA3AF" Text="该进程让磁盘忙碌的时间占比达到此值才限速" />
+                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#9CA3AF"
+                                               Text="{Binding [HintTriggerOccupancy], Source={x:Static loc:LocSource.Instance}}" TextWrapping="Wrap" MaxWidth="520" />
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="目标磁盘占用（%）" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelTargetOccupancy], Source={x:Static loc:LocSource.Instance}}" />
                                     <TextBox Width="90" Text="{Binding Settings.TargetOccupancyPercent, UpdateSourceTrigger=PropertyChanged}" />
-                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#9CA3AF" Text="限速目标：把它的占用压到这个值以下" />
+                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#9CA3AF"
+                                               Text="{Binding [HintTargetOccupancy], Source={x:Static loc:LocSource.Instance}}" TextWrapping="Wrap" MaxWidth="520" />
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="最小 IO 次数（次/秒）" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelMinIops], Source={x:Static loc:LocSource.Instance}}" />
                                     <TextBox Width="90" Text="{Binding Settings.MinIops, UpdateSourceTrigger=PropertyChanged}" />
-                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#9CA3AF" Text="低于该活动量视为噪音，不动手" />
+                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#9CA3AF"
+                                               Text="{Binding [HintMinIops], Source={x:Static loc:LocSource.Instance}}" TextWrapping="Wrap" MaxWidth="520" />
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,10,0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="紧急保护（忙率 ≥ 该值立即限速）" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelEmergency], Source={x:Static loc:LocSource.Instance}}" />
                                     <CheckBox IsChecked="{Binding Settings.EnableEmergencyThrottle}" />
                                     <TextBox Width="70" Margin="10,0,0,0" Text="{Binding Settings.EmergencyPercent, UpdateSourceTrigger=PropertyChanged}" />
-                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#9CA3AF" Text="秒级响应，用于防止突然卡死未响应（推荐 98）" />
+                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#9CA3AF"
+                                               Text="{Binding [HintEmergency], Source={x:Static loc:LocSource.Instance}}" TextWrapping="Wrap" MaxWidth="440" />
                                 </StackPanel>
                             </StackPanel>
                         </Border>
 
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource SectionTitle}" Text="限速手段" />
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardThrottle], Source={x:Static loc:LocSource.Instance}}" />
                                 <StackPanel Orientation="Horizontal" Margin="0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="降低磁盘 IO 优先级" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelLowerIoPriority], Source={x:Static loc:LocSource.Instance}}" />
                                     <CheckBox IsChecked="{Binding Settings.LowerIoPriority}" />
-                                    <TextBlock Margin="18,0,0,0" VerticalAlignment="Center" Text="等级：" />
-                                    <ComboBox Width="120" SelectedIndex="{Binding Settings.IoPriorityLevel}">
-                                        <ComboBoxItem Content="极低（推荐）" />
-                                        <ComboBoxItem Content="低" />
+                                    <TextBlock Margin="18,0,0,0" VerticalAlignment="Center" Text="{Binding [LabelLevel], Source={x:Static loc:LocSource.Instance}}" />
+                                    <ComboBox Width="150" SelectedIndex="{Binding Settings.IoPriorityLevel}">
+                                        <ComboBoxItem Content="{Binding [OptionVeryLow], Source={x:Static loc:LocSource.Instance}}" />
+                                        <ComboBoxItem Content="{Binding [OptionLow], Source={x:Static loc:LocSource.Instance}}" />
                                     </ComboBox>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="同时降低 CPU 优先级" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelLowerCpuPriority], Source={x:Static loc:LocSource.Instance}}" />
                                     <CheckBox IsChecked="{Binding Settings.LowerCpuPriority}" />
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,10,0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="启用磁盘吞吐上限" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelEnableRateCap], Source={x:Static loc:LocSource.Instance}}" />
                                     <CheckBox IsChecked="{Binding Settings.EnableRateCap}" />
-                                    <TextBlock Margin="18,0,0,0" VerticalAlignment="Center" Text="上限（MB/s）：" />
+                                    <TextBlock Margin="18,0,0,0" VerticalAlignment="Center" Text="{Binding [LabelCapValue], Source={x:Static loc:LocSource.Instance}}" />
                                     <TextBox Width="90" Text="{Binding Settings.RateCapMBps, UpdateSourceTrigger=PropertyChanged}" />
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="升级到上限前等待（秒）" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelEscalate], Source={x:Static loc:LocSource.Instance}}" />
                                     <TextBox Width="90" Text="{Binding Settings.EscalateSeconds, UpdateSourceTrigger=PropertyChanged}" />
-                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#9CA3AF" Text="一级限速无效时才会升级" />
+                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#9CA3AF"
+                                               Text="{Binding [HintEscalate], Source={x:Static loc:LocSource.Instance}}" TextWrapping="Wrap" MaxWidth="520" />
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,10,0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="强力模式（间歇挂起）" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelSuspendMode], Source={x:Static loc:LocSource.Instance}}" />
                                     <CheckBox IsChecked="{Binding Settings.EnableSuspendMode}" />
-                                    <TextBlock Margin="18,0,0,0" VerticalAlignment="Center" Text="运行(ms)：" />
+                                    <TextBlock Margin="18,0,0,0" VerticalAlignment="Center" Text="{Binding [LabelSuspendRun], Source={x:Static loc:LocSource.Instance}}" />
                                     <TextBox Width="70" Text="{Binding Settings.SuspendRunMs, UpdateSourceTrigger=PropertyChanged}" />
-                                    <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" Text="挂起(ms)：" />
+                                    <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" Text="{Binding [LabelSuspendPause], Source={x:Static loc:LocSource.Instance}}" />
                                     <TextBox Width="70" Text="{Binding Settings.SuspendPauseMs, UpdateSourceTrigger=PropertyChanged}" />
                                 </StackPanel>
-                                <TextBlock Margin="170,2,0,0" Foreground="#B45309" TextWrapping="Wrap"
-                                           Text="提示：强力模式效果最明显，但被限速的程序会出现短暂无响应，默认关闭。" />
+                                <TextBlock Margin="190,2,0,0" Foreground="#B45309" TextWrapping="Wrap"
+                                           Text="{Binding [HintSuspendWarning], Source={x:Static loc:LocSource.Instance}}" />
                             </StackPanel>
                         </Border>
 
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource SectionTitle}" Text="保护设置" />
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardProtection], Source={x:Static loc:LocSource.Instance}}" />
                                 <StackPanel Orientation="Horizontal" Margin="0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="保护前台程序" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelProtectForeground], Source={x:Static loc:LocSource.Instance}}" />
                                     <CheckBox IsChecked="{Binding Settings.ProtectForeground}" />
-                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#9CA3AF" Text="前台程序不会被限速" />
+                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#9CA3AF"
+                                               Text="{Binding [HintProtectForeground], Source={x:Static loc:LocSource.Instance}}" TextWrapping="Wrap" MaxWidth="520" />
                                 </StackPanel>
-                                <TextBlock Margin="0,10,0,4" Foreground="#374151" Text="保护名单（每行一个进程名，例如 chrome.exe；支持 .exe 省略）" />
+                                <TextBlock Margin="0,10,0,4" Foreground="#374151" TextWrapping="Wrap"
+                                           Text="{Binding [LabelWhitelist], Source={x:Static loc:LocSource.Instance}}" />
                                 <TextBox Height="110" AcceptsReturn="True" VerticalScrollBarVisibility="Auto"
                                          Text="{Binding Settings.WhitelistText, UpdateSourceTrigger=PropertyChanged}" />
                             </StackPanel>
@@ -231,36 +256,37 @@
 
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource SectionTitle}" Text="程序行为" />
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardBehavior], Source={x:Static loc:LocSource.Instance}}" />
                                 <StackPanel Orientation="Horizontal" Margin="0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="开机自动启动（管理员）" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelAutoStart], Source={x:Static loc:LocSource.Instance}}" />
                                     <CheckBox x:Name="AutoStartCheck" IsChecked="{Binding Settings.AutoStart}" Click="OnAutoStartClicked" />
-                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#9CA3AF" Text="创建计划任务，登录后静默启动" />
+                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#9CA3AF"
+                                               Text="{Binding [HintAutoStart], Source={x:Static loc:LocSource.Instance}}" TextWrapping="Wrap" MaxWidth="520" />
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="启动时最小化到托盘" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelStartMinimized], Source={x:Static loc:LocSource.Instance}}" />
                                     <CheckBox IsChecked="{Binding Settings.StartMinimized}" />
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="写入日志文件" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelWriteLog], Source={x:Static loc:LocSource.Instance}}" />
                                     <CheckBox IsChecked="{Binding Settings.WriteLogFile}" />
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="限速时显示气泡提示" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelShowBalloon], Source={x:Static loc:LocSource.Instance}}" />
                                     <CheckBox IsChecked="{Binding Settings.ShowBalloon}" />
                                 </StackPanel>
                             </StackPanel>
                         </Border>
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
-                            <Button Content="保存设置" Padding="20,6" Click="OnSaveSettingsClicked" Background="#2563EB" Foreground="White" BorderBrush="#1D4ED8" />
-                            <Button Content="恢复默认设置" Margin="10,0,0,0" Click="OnResetSettingsClicked" />
+                            <Button Content="{Binding [BtnSaveSettings], Source={x:Static loc:LocSource.Instance}}" Padding="20,6" Click="OnSaveSettingsClicked" Background="#2563EB" Foreground="White" BorderBrush="#1D4ED8" />
+                            <Button Content="{Binding [BtnResetSettings], Source={x:Static loc:LocSource.Instance}}" Margin="10,0,0,0" Click="OnResetSettingsClicked" />
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
 
-            <TabItem Header="日志">
+            <TabItem Header="{Binding [TabLog], Source={x:Static loc:LocSource.Instance}}">
                 <Grid Margin="4">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*" />
@@ -270,78 +296,75 @@
                               BorderBrush="#E3E7EF" BorderThickness="1">
                         <ListView.View>
                             <GridView>
-                                <GridViewColumn Header="时间" Width="90" DisplayMemberBinding="{Binding Time}" />
-                                <GridViewColumn Header="级别" Width="70" DisplayMemberBinding="{Binding Level}" />
-                                <GridViewColumn Header="内容" Width="820" DisplayMemberBinding="{Binding Message}" />
+                                <GridViewColumn Header="{Binding [ColLogTime], Source={x:Static loc:LocSource.Instance}}" Width="90" DisplayMemberBinding="{Binding Time}" />
+                                <GridViewColumn Header="{Binding [ColLogLevel], Source={x:Static loc:LocSource.Instance}}" Width="70" DisplayMemberBinding="{Binding Level}" />
+                                <GridViewColumn Header="{Binding [ColLogMessage], Source={x:Static loc:LocSource.Instance}}" Width="820" DisplayMemberBinding="{Binding Message}" />
                             </GridView>
                         </ListView.View>
                     </ListView>
                     <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,10,0,0">
-                        <Button Content="清空日志" Click="OnClearLogClicked" />
-                        <Button Content="打开日志目录" Margin="8,0,0,0" Click="OnOpenFolderClicked" />
+                        <Button Content="{Binding [BtnClearLog], Source={x:Static loc:LocSource.Instance}}" Click="OnClearLogClicked" />
+                        <Button Content="{Binding [BtnOpenLogDir], Source={x:Static loc:LocSource.Instance}}" Margin="8,0,0,0" Click="OnOpenFolderClicked" />
                     </StackPanel>
                 </Grid>
             </TabItem>
 
-            <TabItem Header="关于">
+            <TabItem Header="{Binding [TabAbout], Source={x:Static loc:LocSource.Instance}}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Margin="4,4,4,12">
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
-                                <TextBlock Text="磁盘守护 DiskGuard" FontSize="20" FontWeight="SemiBold" Foreground="#111827" />
-                                <TextBlock x:Name="AboutVersionText" Margin="0,6,0,0" Foreground="#6B7280" Text="版本 --" />
-                                <TextBlock Margin="0,12,0,0" FontSize="15" FontWeight="SemiBold" Foreground="#1D4ED8" Text="by Hison" />
+                                <TextBlock Text="{Binding [AboutTitle], Source={x:Static loc:LocSource.Instance}}" FontSize="20" FontWeight="SemiBold" Foreground="#111827" />
+                                <TextBlock x:Name="AboutVersionText" Margin="0,6,0,0" Foreground="#6B7280" Text="--" />
+                                <TextBlock Margin="0,12,0,0" FontSize="15" FontWeight="SemiBold" Foreground="#1D4ED8" Text="{Binding [AboutByAuthor], Source={x:Static loc:LocSource.Instance}}" />
                                 <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#4B5563"
-                                           Text="实时监控磁盘忙率；当磁盘 0 持续繁忙时，自动对占用最高的可限速进程降优先级 / 限吞吐，磁盘空闲后自动还原，用来缓解打字、输入法与前台软件卡顿。" />
+                                           Text="{Binding [AboutSummaryLine1], Source={x:Static loc:LocSource.Instance}}" />
                                 <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#6B7280"
-                                           Text="单文件免安装，自带 .NET 运行时；建议以管理员身份运行以获得 ETW 精确统计。" />
+                                           Text="{Binding [AboutSummaryLine2], Source={x:Static loc:LocSource.Instance}}" />
                             </StackPanel>
                         </Border>
 
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource SectionTitle}" Text="作者与账号" />
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardAuthor], Source={x:Static loc:LocSource.Instance}}" />
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Width="80" Text="作者" />
-                                    <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="Hison（Hison 制作）" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Width="110" Text="{Binding [LabelAuthor], Source={x:Static loc:LocSource.Instance}}" />
+                                    <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding [AuthorName], Source={x:Static loc:LocSource.Instance}}" />
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Width="80" Text="抖音" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Width="110" Text="{Binding [LabelDouyin], Source={x:Static loc:LocSource.Instance}}" />
                                     <TextBlock x:Name="DouyinText" VerticalAlignment="Center" Foreground="#111827" Text="XRuiiiiii" />
-                                    <Button Content="复制" Margin="12,0,0,0" Padding="12,2" Click="OnCopyDouyinClicked" />
+                                    <Button Content="{Binding [BtnCopy], Source={x:Static loc:LocSource.Instance}}" Margin="12,0,0,0" Padding="12,2" Click="OnCopyDouyinClicked" />
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Width="80" Text="小红书" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Width="110" Text="{Binding [LabelXiaohongshu], Source={x:Static loc:LocSource.Instance}}" />
                                     <TextBlock x:Name="XiaohongshuText" VerticalAlignment="Center" Foreground="#111827" Text="xiaoruiaaa520" />
-                                    <Button Content="复制" Margin="12,0,0,0" Padding="12,2" Click="OnCopyXiaohongshuClicked" />
+                                    <Button Content="{Binding [BtnCopy], Source={x:Static loc:LocSource.Instance}}" Margin="12,0,0,0" Padding="12,2" Click="OnCopyXiaohongshuClicked" />
                                 </StackPanel>
                                 <TextBlock x:Name="AboutCopyHint" Margin="0,10,0,0" Foreground="#059669" Text="" />
                                 <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#6B7280"
-                                           Text="使用中遇到问题或有建议，欢迎通过上面两个账号联系作者。" />
+                                           Text="{Binding [HintContactAuthor], Source={x:Static loc:LocSource.Instance}}" />
                             </StackPanel>
                         </Border>
 
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource SectionTitle}" Text="开源与致谢" />
-                                <TextBlock TextWrapping="Wrap" Foreground="#374151"
-                                           Text="本项目以 MIT 许可开源，欢迎自取源码、提交问题与改进。" />
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardOpenSource], Source={x:Static loc:LocSource.Instance}}" />
+                                <TextBlock TextWrapping="Wrap" Foreground="#374151" Text="{Binding [OpenSourceText], Source={x:Static loc:LocSource.Instance}}" />
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                    <Button x:Name="ProjectHomeButton" Content="打开项目主页（GitHub）" Click="OnOpenProjectHomeClicked" Visibility="Collapsed" />
-                                    <Button Content="打开配置目录" Margin="8,0,0,0" Click="OnOpenFolderClicked" />
+                                    <Button x:Name="ProjectHomeButton" Content="{Binding [BtnOpenProjectHome], Source={x:Static loc:LocSource.Instance}}" Click="OnOpenProjectHomeClicked" Visibility="Collapsed" />
+                                    <Button Content="{Binding [BtnOpenConfigDir], Source={x:Static loc:LocSource.Instance}}" Margin="8,0,0,0" Click="OnOpenFolderClicked" />
                                 </StackPanel>
                                 <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#4B5563"
-                                           Text="第三方组件：Microsoft.Diagnostics.Tracing.TraceEvent（微软官方，MIT 许可），用于读取 ETW 内核磁盘事件。" />
+                                           Text="{Binding [ThirdPartyText], Source={x:Static loc:LocSource.Instance}}" />
                             </StackPanel>
                         </Border>
 
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource SectionTitle}" Text="使用边界与免责声明" />
-                                <TextBlock TextWrapping="Wrap" Foreground="#374151"
-                                           Text="程序只调整目标进程的磁盘 / CPU 优先级与磁盘吞吐上限，不改注册表、不关服务、不结束进程，任何限速都可随时还原（强杀本程序也会在下次启动时自动还原残留）。" />
-                                <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#374151"
-                                           Text="内核（System）IO、受保护进程（如部分杀毒软件）与硬盘自身回收不受本程序控制；请自行评估在关键业务机器上使用的风险。" />
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardDisclaimer], Source={x:Static loc:LocSource.Instance}}" />
+                                <TextBlock TextWrapping="Wrap" Foreground="#374151" Text="{Binding [DisclaimerText1], Source={x:Static loc:LocSource.Instance}}" />
+                                <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#374151" Text="{Binding [DisclaimerText2], Source={x:Static loc:LocSource.Instance}}" />
                             </StackPanel>
                         </Border>
                     </StackPanel>

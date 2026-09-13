@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using DiskGuard.Core.Localization;
 using DiskGuard.Core.Util;
 
 namespace DiskGuard.App.ViewModels;
@@ -76,11 +77,11 @@ public sealed class ProcessRowVm : INotifyPropertyChanged
         }
     }
 
-    public string OccupancyText => _occupancy <= 0 ? "-" : $"{_occupancy:0.#}%";
+    public string OccupancyText => _occupancy <= 0 ? "-" : Loc.Value($"{_occupancy:0.#}%");
 
-    public string RateText => ProcessUtil.FormatRate(_read + _write);
-    public string ReadText => ProcessUtil.FormatRate(_read);
-    public string WriteText => ProcessUtil.FormatRate(_write);
+    public string RateText => Loc.Value(ProcessUtil.FormatRate(_read + _write));
+    public string ReadText => Loc.Value(ProcessUtil.FormatRate(_read));
+    public string WriteText => Loc.Value(ProcessUtil.FormatRate(_write));
 
     private void OnChanged(string propertyName)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));

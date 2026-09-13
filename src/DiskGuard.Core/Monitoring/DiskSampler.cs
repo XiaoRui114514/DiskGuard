@@ -1,3 +1,5 @@
+using DiskGuard.Core.Localization;
+
 namespace DiskGuard.Core.Monitoring;
 
 public sealed class DiskStatus
@@ -14,8 +16,10 @@ public sealed class DiskStatus
     {
         get
         {
-            if (DiskNumber < 0) return "所有磁盘";
-            return Drives.Length > 0 ? $"磁盘 {DiskNumber} ({Drives})" : $"磁盘 {DiskNumber}";
+            if (DiskNumber < 0) return Loc.T(LK.DiskAllDisks);
+            return Drives.Length > 0
+                ? Loc.F(LK.DiskLabelWithDrivesFormat, DiskNumber, Drives)
+                : Loc.F(LK.DiskLabelFormat, DiskNumber);
         }
     }
 }

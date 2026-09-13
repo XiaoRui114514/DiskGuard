@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using DiskGuard.Core.Config;
+using DiskGuard.Core.Localization;
 using DiskGuard.Core.Logging;
 using DiskGuard.Core.Monitoring;
 using DiskGuard.Core.Throttling;
@@ -82,7 +83,7 @@ public sealed class GuardEngine : IDisposable
 
     public bool Running => _worker is { IsAlive: true };
     public bool Paused => _paused;
-    public string IoMode => _ioSource?.Mode ?? "启动中…";
+    public string IoMode => _ioSource?.Mode ?? Loc.T(LK.IoModeStarting);
     public bool IoPrecise => _ioSource?.IsPrecise ?? false;
     public EngineSnapshot? LastSnapshot { get; private set; }
 
@@ -110,7 +111,7 @@ public sealed class GuardEngine : IDisposable
         _cts.Cancel();
         try { _worker?.Join(TimeSpan.FromSeconds(3)); } catch { }
         _worker = null;
-        ReleaseTarget("监控已停止");
+        ReleaseTarget(Loc.T(LK.EngineReasonStopped));
         _diskSampler?.Dispose();
         _diskSampler = null;
         _ioSource?.Dispose();
@@ -139,11 +140,15 @@ public sealed class GuardEngine : IDisposable
                 _highSince = null;
                 _lowSince = null;
             }
-            _log.Info(recreate ? $"已切换到磁盘 {_settings.DiskNumber} 的统计（原有采样窗口已重置）。" : "监控已启动。");
+            _log.Info(recreate
+                ? Loc.F(LK.EngineMonitorSwitchedFormat, _settings.DiskNumber)
+                : Loc.T(LK.EngineMonitorStarted));
         }
         catch (Exception ex)
         {
-            _log.Error((recreate ? "重建数据源失败：" : "启动监控失败：") + ex.Message);
+            _log.Error(recreate
+                ? Loc.F(LK.EngineRebuildFailedFormat, ex.Message)
+                : Loc.F(LK.EngineStartFailedFormat, ex.Message));
         }
     }
 
@@ -176,7 +181,7 @@ public sealed class GuardEngine : IDisposable
         if (_sourceRebuildCount >= 3)
         {
             _sourceRebuildCount = 0;
-            _log.Warn("多次重建后 ETW 仍收不到事件，改用按字节占比的近似统计（磁盘忙率仍然准确）。");
+            _log.Warn(Loc.T(LK.EngineApproxFallback));
             try
             {
                 _ioSource?.Dispose();
@@ -184,12 +189,12 @@ public sealed class GuardEngine : IDisposable
             }
             catch (Exception ex)
             {
-                _log.Error("切换近似统计失败：" + ex.Message);
+                _log.Error(Loc.F(LK.EngineApproxSwitchFailedFormat, ex.Message));
             }
             return false;
         }
 
-        _log.Warn($"ETW 已停止上报事件（多由系统内核会话抢占导致），正在重建数据源（第 {_sourceRebuildCount} 次）…");
+        _log.Warn(Loc.F(LK.EngineEtwStalledFormat, _sourceRebuildCount));
         _restartRequested = true;
         return false;
     }
@@ -197,8 +202,8 @@ public sealed class GuardEngine : IDisposable
     public void Pause()
     {
         _paused = true;
-        ReleaseTarget("已暂停监控");
-        _log.Info("已暂停监控并解除全部限速。");
+        ReleaseTarget(Loc.T(LK.StatePaused));
+        _log.Info(Loc.T(LK.EngineMonitorPaused));
     }
 
     public void Resume()
@@ -209,19 +214,19 @@ public sealed class GuardEngine : IDisposable
             _highSince = null;
             _lowSince = null;
         }
-        _log.Info("已恢复监控。");
+        _log.Info(Loc.T(LK.EngineMonitorResumed));
     }
 
     public bool ManualThrottle(int pid, string name)
     {
         lock (_stateSync)
         {
-            if (_target != null) ReleaseTarget("切换手动限速目标");
+            if (_target != null) ReleaseTarget(Loc.T(LK.EngineReasonManualSwitch));
 
             var handle = _throttler.ApplyLevel1(pid, name, _settings.LowerIoPriority, _settings.IoPriorityLevel, _settings.LowerCpuPriority);
             if (handle == null)
             {
-                _log.Warn($"手动限速失败：{name} (PID {pid})" + (_throttler.LastErrorText.Length > 0 ? "，" + _throttler.LastErrorText : "，权限不足或进程受保护"));
+                _log.Warn(Loc.F(LK.EngineManualThrottleFailedFormat, name, pid, ThrottleErrorText()));
                 return false;
             }
 
@@ -232,7 +237,7 @@ public sealed class GuardEngine : IDisposable
             _currentCapBytesPerSec = (long)Math.Max(1, _settings.RateCapMBps) * (long)Mega;
             _capHoldLogged = false;
             _capFloorLogged = false;
-            _log.Info($"手动限速：{name} (PID {pid}) 已降到最低磁盘/CPU 优先级。");
+            _log.Info(Loc.F(LK.EngineManualPriorityDoneFormat, name, pid));
 
             if (_settings.EnableRateCap)
             {
@@ -240,11 +245,11 @@ public sealed class GuardEngine : IDisposable
                 if (_throttler.ApplyLevel2(handle, cap))
                 {
                     _targetLevel = 2;
-                    _log.Info($"手动限速：{name} 已施加磁盘吞吐上限 {_settings.RateCapMBps:0.#} MB/s。");
+                    _log.Info(Loc.F(LK.EngineManualCapDoneFormat, name, _settings.RateCapMBps));
                 }
                 else
                 {
-                    _log.Warn($"未能施加磁盘吞吐上限（{_throttler.LastErrorText}），已保留优先级限速。");
+                    _log.Warn(Loc.F(LK.EngineCapApplyFailedFormat, _throttler.LastErrorText));
                 }
             }
 
@@ -262,7 +267,7 @@ public sealed class GuardEngine : IDisposable
             if (target == null) return;
 
             _throttler.Release(target);
-            _log.Info($"已还原 {target.Name} (PID {target.Pid}) 的磁盘/CPU 优先级。（{reason}）");
+            _log.Info(Loc.F(LK.EngineRestoredFormat, target.Name, target.Pid, reason));
 
             RemoveRecord(target.Pid);
             _target = null;
@@ -316,7 +321,7 @@ public sealed class GuardEngine : IDisposable
                 record.AppliedPriorityClass, record.OriginalPriorityClass);
 
             if (restored)
-                _log.Warn($"发现上次异常退出残留的限速，已还原：{record.Name} (PID {record.Pid})");
+                _log.Warn(Loc.F(LK.EngineRestoredStaleFormat, record.Name, record.Pid));
         }
 
         ActiveThrottleStore.Save(Array.Empty<ActiveThrottleRecord>());
@@ -364,7 +369,7 @@ public sealed class GuardEngine : IDisposable
             if (_restartRequested)
             {
                 _restartRequested = false;
-                ReleaseTarget("切换监控磁盘");
+                ReleaseTarget(Loc.T(LK.EngineReasonSwitchDisk));
                 InitializeSources(recreate: true);
             }
             else if ((_diskSampler == null || _ioSource == null) && DateTime.Now >= _nextInitRetry)
@@ -388,7 +393,7 @@ public sealed class GuardEngine : IDisposable
             }
             catch (Exception ex)
             {
-                _log.Error("采样失败：" + ex.Message);
+                _log.Error(Loc.F(LK.EngineSampleFailedFormat, ex.Message));
             }
             finally
             {
@@ -411,7 +416,7 @@ public sealed class GuardEngine : IDisposable
         if (!string.IsNullOrEmpty(health) && DateTime.Now - _lastSourceRestart > TimeSpan.FromMinutes(5))
         {
             _lastSourceRestart = DateTime.Now;
-            _log.Warn($"ETW 统计中断：{health}，正在重建数据源…");
+            _log.Warn(Loc.F(LK.EngineEtwInterruptedFormat, health));
             _restartRequested = true;
             return;
         }
@@ -525,7 +530,7 @@ public sealed class GuardEngine : IDisposable
                 WriteBytesPerSec = disk?.WriteBytesPerSec ?? 0,
                 Disks = sampler.Disks,
                 DiskNumber = settings.DiskNumber,
-                DiskLabel = disk?.DisplayName ?? $"磁盘 {settings.DiskNumber}",
+                DiskLabel = disk?.DisplayName ?? Loc.F(LK.DiskLabelFormat, settings.DiskNumber),
                 Rows = rows.Count > 25 ? rows.GetRange(0, 25) : rows,
                 ActivePid = _target?.Pid ?? -1,
                 ActiveName = _target?.Name ?? string.Empty,
@@ -555,9 +560,9 @@ public sealed class GuardEngine : IDisposable
         {
             int eventCount = source is EtwProcessIoSource etw ? (int)Math.Min(int.MaxValue, etw.EventCount) : -1;
             string etwExtra = source is EtwProcessIoSource e2
-                ? $" 快照条数={e2.LastSnapshotItems} 丢弃(磁盘/进程/长度)={e2.DroppedDisk}/{e2.DroppedPid}/{e2.DroppedSize}"
+                ? Loc.F(LK.EngineDiagnosticExtraFormat, e2.LastSnapshotItems, e2.DroppedDisk, e2.DroppedPid, e2.DroppedSize)
                 : string.Empty;
-            _log.Info($"[诊断] 采样行数={rows.Count} 忙率={busy:0.0}% ETW事件累计={eventCount}{etwExtra} 数据源={source.Mode}");
+            _log.Info(Loc.F(LK.EngineDiagnosticFormat, rows.Count, busy, eventCount, etwExtra, source.Mode));
         }
     }
 
@@ -588,7 +593,7 @@ public sealed class GuardEngine : IDisposable
         if (_target != null && !ProcessAlive(_target.Pid))
         {
             var exited = _target;
-            _log.Info($"被限速进程 {exited.Name} (PID {exited.Pid}) 已退出。");
+            _log.Info(Loc.F(LK.EngineTargetExitedFormat, exited.Name, exited.Pid));
             _throttler.Release(exited);
             RemoveRecord(exited.Pid);
             _target = null;
@@ -610,13 +615,13 @@ public sealed class GuardEngine : IDisposable
                 // 否则用户切过去发现"打字卡、点不动"，而它要等近 30 秒无 IO 才会解除。
                 if (_settings.ProtectForeground && protectedPids.Contains(_target.Pid))
                 {
-                    ReleaseTarget("该进程已成为前台程序（保护前台）");
+                    ReleaseTarget(Loc.T(LK.EngineReasonForeground));
                     return;
                 }
 
                 if (_settings.IsWhitelisted(_target.Name))
                 {
-                    ReleaseTarget("该进程已在保护名单中");
+                    ReleaseTarget(Loc.T(LK.EngineReasonWhitelisted));
                     return;
                 }
 
@@ -637,7 +642,8 @@ public sealed class GuardEngine : IDisposable
             if (urgent != null)
             {
                 _emergencyTicks = 0;
-                _log.Warn($"磁盘 {_settings.DiskNumber} 忙率 {busy:0}% 达到紧急阈值 {_settings.EmergencyPercent:0}%，立即限速 {urgent.Name}（PID {urgent.Pid}）。");
+                _log.Warn(Loc.F(LK.EngineEmergencyThrottleFormat,
+                    _settings.DiskNumber, busy, _settings.EmergencyPercent, urgent.Name, urgent.Pid));
                 Engage(urgent, busy, emergency: true);
                 return;
             }
@@ -651,8 +657,8 @@ public sealed class GuardEngine : IDisposable
             if (!_warnedUnable)
             {
                 _warnedUnable = true;
-                _log.Warn($"磁盘 {_settings.DiskNumber} 忙率 {busy:0}% 持续偏高，但没有磁盘占用超过 {_settings.TriggerOccupancyPercent:0.#}% 的可限速进程" +
-                          "（可能由内核/驱动 IO、SSD 自身回收或大量分散的小 IO 引起）。");
+                _log.Warn(Loc.F(LK.EngineBusyNoCandidateFormat,
+                    _settings.DiskNumber, busy, _settings.TriggerOccupancyPercent));
             }
             return;
         }
@@ -697,7 +703,7 @@ public sealed class GuardEngine : IDisposable
 
         if (_idleTargetTicks >= 3)
         {
-            ReleaseTarget($"被限速进程 {target.Name} 已停止磁盘占用（{window} 秒窗口平均活动接近 0）");
+            ReleaseTarget(Loc.F(LK.EngineIdleReleaseFormat, target.Name, window));
             return;
         }
 
@@ -711,9 +717,10 @@ public sealed class GuardEngine : IDisposable
 
             if (_pendingCount >= 3)
             {
-                _log.Info($"检测到占用更重的进程：{heavier.Name} (PID {heavier.Pid}) 磁盘占用 {heavier.AverageOccupancyPercent:0.#}%，切换限速目标。");
+                _log.Info(Loc.F(LK.EngineHeavierTargetFormat,
+                    heavier.Name, heavier.Pid, heavier.AverageOccupancyPercent));
                 // 复用统一入口：还原旧目标、清掉记录与窗口，再对新目标限速
-                ReleaseTarget("切换到占用更高的进程");
+                ReleaseTarget(Loc.T(LK.EngineReasonSwitchHeavier));
                 Engage(heavier, busy);
                 return;
             }
@@ -732,7 +739,8 @@ public sealed class GuardEngine : IDisposable
             if (!_capHoldLogged)
             {
                 _capHoldLogged = true;
-                _log.Info($"{target.Name} 的磁盘占用已降到 {share:0.#}%（达标线 {_settings.TargetOccupancyPercent:0.#}%），维持当前限速。");
+                _log.Info(Loc.F(LK.EngineTargetSatisfiedFormat,
+                    target.Name, share, _settings.TargetOccupancyPercent));
             }
             return;
         }
@@ -747,7 +755,7 @@ public sealed class GuardEngine : IDisposable
                 if (!_capFloorLogged)
                 {
                     _capFloorLogged = true;
-                    _log.Warn($"{target.Name} 仍占磁盘 {share:0.#}%，但未启用吞吐上限；可在设置中开启或启用强力模式。");
+                    _log.Warn(Loc.F(LK.EngineCapDisabledHintFormat, target.Name, share));
                 }
                 return;
             }
@@ -760,14 +768,14 @@ public sealed class GuardEngine : IDisposable
             {
                 _targetLevel = 2;
                 _levelAppliedAt = now;
-                _log.Info($"{target.Name} 仍占磁盘 {share:0.#}%，施加磁盘吞吐上限 {cap / Mega:0.#} MB/s。");
+                _log.Info(Loc.F(LK.EngineCapAppliedFormat, target.Name, share, cap / Mega));
                 PersistRecords();
             }
             else
             {
                 _targetLevel = 2;   // 标记已尝试，避免每秒重试
                 _levelAppliedAt = now;
-                _log.Warn($"该进程无法使用吞吐上限（{_throttler.LastErrorText}），继续使用优先级限速。");
+                _log.Warn(Loc.F(LK.EngineCapUnsupportedFormat, _throttler.LastErrorText));
             }
             return;
         }
@@ -781,7 +789,7 @@ public sealed class GuardEngine : IDisposable
             {
                 _currentCapBytesPerSec = next;
                 _levelAppliedAt = now;
-                _log.Info($"{target.Name} 仍占磁盘 {share:0.#}%，吞吐上限收紧到 {next / Mega:0.#} MB/s。");
+                _log.Info(Loc.F(LK.EngineCapTightenedFormat, target.Name, share, next / Mega));
                 return;
             }
 
@@ -789,15 +797,16 @@ public sealed class GuardEngine : IDisposable
             {
                 _targetLevel = 3;
                 _levelAppliedAt = now;
-                _log.Warn($"{target.Name} 已到吞吐下限仍占磁盘 {share:0.#}%，启用间歇挂起（{_settings.SuspendRunMs}ms 运行 / {_settings.SuspendPauseMs}ms 挂起）。");
+                _log.Warn(Loc.F(LK.EngineSuspendEnabledFormat,
+                    target.Name, share, _settings.SuspendRunMs, _settings.SuspendPauseMs));
                 return;
             }
 
             if (!_capFloorLogged)
             {
                 _capFloorLogged = true;
-                _log.Warn($"{target.Name} 已到吞吐下限（{_currentCapBytesPerSec / Mega:0.#} MB/s），当前占磁盘 {share:0.#}%；" +
-                          "如仍卡顿，可在设置中开启强力模式。");
+                _log.Warn(Loc.F(LK.EngineCapAtMinimumFormat,
+                    target.Name, _currentCapBytesPerSec / Mega, share));
             }
         }
     }
@@ -923,7 +932,7 @@ public sealed class GuardEngine : IDisposable
         if (handle == null)
         {
             _blockedPids[row.Pid] = DateTime.Now.AddSeconds(60);
-            _log.Warn($"无法限速 {row.Name} (PID {row.Pid})：" + (_throttler.LastErrorText.Length > 0 ? _throttler.LastErrorText : "权限不足或进程受保护"));
+            _log.Warn(Loc.F(LK.EngineThrottleFailedFormat, row.Name, row.Pid, ThrottleErrorText()));
             return;
         }
 
@@ -954,8 +963,10 @@ public sealed class GuardEngine : IDisposable
         AddRecord(handle);
         PersistRecords();
 
-        _log.Info($"磁盘 {_settings.DiskNumber} 忙率 {busy:0}%，已限速最高占用进程 {handle.Name} (PID {handle.Pid})：" +
-                  $"磁盘占用 {row.AverageOccupancyPercent:0.#}%（{ProcessUtil.FormatRate(row.TotalBytesPerSec)}，目标降到 {_settings.TargetOccupancyPercent:0.#}% 以下）→ 磁盘优先级降到最低。");
+        _log.Info(Loc.F(LK.EngineAutoThrottleFormat,
+            _settings.DiskNumber, busy, handle.Name, handle.Pid,
+            row.AverageOccupancyPercent, ProcessUtil.FormatRate(row.TotalBytesPerSec),
+            _settings.TargetOccupancyPercent));
 
         if (emergency && _settings.EnableRateCap)
         {
@@ -964,7 +975,7 @@ public sealed class GuardEngine : IDisposable
             {
                 _targetLevel = 2;
                 _levelAppliedAt = DateTime.Now;
-                _log.Warn($"紧急模式：{handle.Name} 已直接施加磁盘吞吐上限 {_settings.RateCapMBps:0.#} MB/s。");
+                _log.Warn(Loc.F(LK.EngineEmergencyCapFormat, handle.Name, _settings.RateCapMBps));
             }
         }
     }
@@ -1000,18 +1011,22 @@ public sealed class GuardEngine : IDisposable
         {
             return _targetLevel switch
             {
-                3 => "已限速·挂起",
-                2 => "已限速·吞吐上限",
-                _ => "已限速·优先级"
+                3 => Loc.T(LK.TagThrottledSuspend),
+                2 => Loc.T(LK.TagThrottledCap),
+                _ => Loc.T(LK.TagThrottledPriority)
             };
         }
 
-        if (row.Pid == 4) return "系统内核";
-        if (ProcessUtil.IsSystemCritical(row.Name)) return "系统关键";
-        if (_settings.IsWhitelisted(row.Name)) return "保护名单";
-        if (protectedPids.Contains(row.Pid)) return "前台程序";
+        if (row.Pid == 4) return Loc.T(LK.TagSystemKernel);
+        if (ProcessUtil.IsSystemCritical(row.Name)) return Loc.T(LK.TagSystemCritical);
+        if (_settings.IsWhitelisted(row.Name)) return Loc.T(LK.TagWhitelist);
+        if (protectedPids.Contains(row.Pid)) return Loc.T(LK.TagForeground);
         return string.Empty;
     }
+
+    /// <summary>限速器最近一次错误文本；没有细节时给出“权限不足或进程受保护”。</summary>
+    private string ThrottleErrorText() =>
+        _throttler.LastErrorText.Length > 0 ? _throttler.LastErrorText : Loc.T(LK.ErrorPermissionOrProtected);
 
     /// <summary>目标进程是否仍然存在（列表里没有它的行不代表它已退出，可能只是这一秒没有 IO）。</summary>
     private static bool ProcessAlive(int pid)
@@ -1061,20 +1076,22 @@ public sealed class GuardEngine : IDisposable
 
     private string BuildStateText()
     {
-        if (Paused) return "已暂停";
+        if (Paused) return Loc.T(LK.StatePaused);
         if (_target != null)
         {
             string level = _targetLevel switch
             {
-                3 => "间歇挂起",
-                2 => "吞吐上限",
-                _ => "低优先级"
+                3 => Loc.T(LK.StateLevelSuspend),
+                2 => Loc.T(LK.StateLevelCap),
+                _ => Loc.T(LK.StateLevelPriority)
             };
-            string shareText = _lastTargetOccupancyPercent > 0 ? $"，占磁盘 {_lastTargetOccupancyPercent:0.#}%" : string.Empty;
-            return $"已限速：{_target.Name}（{level}{shareText}）";
+            string shareText = _lastTargetOccupancyPercent > 0
+                ? Loc.F(LK.StateShareSuffixFormat, _lastTargetOccupancyPercent)
+                : string.Empty;
+            return Loc.F(LK.StateThrottledFormat, _target.Name, level, shareText);
         }
-        if (_highSince.HasValue) return "磁盘繁忙，正在观察…";
-        return "监控中";
+        if (_highSince.HasValue) return Loc.T(LK.StateWatching);
+        return Loc.T(LK.StateMonitoring);
     }
 
     public void Dispose()

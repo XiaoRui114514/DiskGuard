@@ -1,4 +1,5 @@
 using DiskGuard.Core.Interop;
+using DiskGuard.Core.Localization;
 
 namespace DiskGuard.Core.Monitoring;
 
@@ -17,12 +18,12 @@ public static class ProcessIoSourceFactory
 
                 using var stale = Microsoft.Diagnostics.Tracing.Session.TraceEventSession.GetActiveSession(name);
                 stale.Stop(true);
-                log($"已清理上次异常退出残留的 ETW 会话：{name}");
+                log(Loc.F(LK.IoSourceCleanupStaleFormat, name));
             }
         }
         catch (Exception ex)
         {
-            log("清理残留 ETW 会话失败：" + ex.Message);
+            log(Loc.F(LK.IoSourceCleanupFailedFormat, ex.Message));
         }
     }
 
@@ -41,18 +42,18 @@ public static class ProcessIoSourceFactory
 
                     if (string.IsNullOrEmpty(source.Error))
                     {
-                        log($"已启用精确统计：ETW 内核磁盘事件（磁盘 {diskNumber}，私有会话）");
+                        log(Loc.F(LK.IoSourceEtwPrivateOkFormat, diskNumber));
                         return source;
                     }
 
                     string error = source.Error;
                     source.Dispose();
-                    log($"ETW 私有会话启动失败（第 {attempt} 次）：{error}");
+                    log(Loc.F(LK.IoSourceEtwPrivateFailedFormat, attempt, error));
                     Thread.Sleep(500);
                 }
                 catch (Exception ex)
                 {
-                    log($"ETW 私有会话启动异常（第 {attempt} 次）：{ex.Message}");
+                    log(Loc.F(LK.IoSourceEtwPrivateErrorFormat, attempt, ex.Message));
                     Thread.Sleep(500);
                 }
             }
@@ -67,27 +68,27 @@ public static class ProcessIoSourceFactory
 
                     if (string.IsNullOrEmpty(source.Error))
                     {
-                        log($"已启用精确统计：ETW 内核磁盘事件（磁盘 {diskNumber}，系统日志器）");
+                        log(Loc.F(LK.IoSourceEtwSystemOkFormat, diskNumber));
                         return source;
                     }
 
                     string error = source.Error;
                     source.Dispose();
-                    log($"ETW 系统日志器启动失败（第 {attempt} 次）：{error}");
+                    log(Loc.F(LK.IoSourceEtwSystemFailedFormat, attempt, error));
                     Thread.Sleep(500);
                 }
                 catch (Exception ex)
                 {
-                    log($"ETW 系统日志器启动异常（第 {attempt} 次）：{ex.Message}");
+                    log(Loc.F(LK.IoSourceEtwSystemErrorFormat, attempt, ex.Message));
                     Thread.Sleep(500);
                 }
             }
 
-            log("ETW 统计不可用，降级为按字节占比的近似统计（以管理员身份重启通常可恢复精确统计）。");
+            log(Loc.T(LK.IoSourceEtwUnavailable));
         }
         else
         {
-            log("当前未以管理员运行，使用近似统计（含网络 IO）；以管理员运行可获得精确的磁盘0读写统计。");
+            log(Loc.T(LK.IoSourceNotElevated));
         }
 
         return new IoCountersProcessIoSource();

@@ -4,6 +4,7 @@ using System.Windows;
 using DiskGuard.App.Services;
 using DiskGuard.Core.Config;
 using DiskGuard.Core.Engine;
+using DiskGuard.Core.Localization;
 using DiskGuard.Core.Logging;
 using DiskGuard.Core.Util;
 
@@ -17,10 +18,14 @@ public partial class App : System.Windows.Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        // 先读设置并定下界面语言：单实例提示、异常弹窗、托盘日志都要用对语言
+        var settings = AppSettings.Load(AppPaths.SettingsFile);
+        Loc.SetLanguage(Loc.FromCode(settings.Language));
+
         _mutex = new Mutex(true, @"Local\DiskGuard_SingleInstance", out bool createdNew);
         if (!createdNew)
         {
-            System.Windows.MessageBox.Show("磁盘守护已在运行，请在任务栏托盘中查看。", "磁盘守护",
+            System.Windows.MessageBox.Show(Loc.T(LK.MsgSingleInstance), Loc.T(LK.AppTitle),
                 MessageBoxButton.OK, MessageBoxImage.Information);
             Shutdown();
             return;
@@ -30,12 +35,11 @@ public partial class App : System.Windows.Application
 
         DispatcherUnhandledException += (_, args) =>
         {
-            System.Windows.MessageBox.Show("发生未处理错误：" + args.Exception.Message, "磁盘守护",
+            System.Windows.MessageBox.Show(Loc.F(LK.MsgUnhandledFormat, args.Exception.Message), Loc.T(LK.AppTitle),
                 MessageBoxButton.OK, MessageBoxImage.Error);
             args.Handled = true;
         };
 
-        var settings = AppSettings.Load(AppPaths.SettingsFile);
         var logger = new AppLogger
         {
             WriteToFile = settings.WriteLogFile,
@@ -83,19 +87,19 @@ public partial class App : System.Windows.Application
                         {
                             var result = AutoStartService.Enable(AutoStartService.ExecutablePath);
                             logger.Info(result.Ok
-                                ? "已按设置创建开机自启任务（登录后自动以管理员权限启动）。"
-                                : "创建开机自启任务失败：" + result.Message);
+                                ? Loc.T(LK.LogAutoStartCreated)
+                                : Loc.F(LK.LogAutoStartCreateFailedFormat, result.Message));
                         }
                     }
                     else
                     {
-                        logger.Warn("已开启开机自启，但当前未以管理员运行，无法创建计划任务；点界面右下角「以管理员身份重启」后会自动创建。");
+                        logger.Warn(Loc.T(LK.LogAutoStartNeedAdmin));
                     }
                 }
             }
             catch (Exception ex)
             {
-                logger.Warn("处理开机自启失败：" + ex.Message);
+                logger.Warn(Loc.F(LK.LogAutoStartHandleFailedFormat, ex.Message));
             }
         });
     }

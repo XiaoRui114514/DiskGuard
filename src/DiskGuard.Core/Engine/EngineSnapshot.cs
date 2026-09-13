@@ -1,3 +1,4 @@
+using DiskGuard.Core.Localization;
 using DiskGuard.Core.Monitoring;
 using DiskGuard.Core.Util;
 
@@ -60,7 +61,7 @@ public sealed class EngineSnapshot
 
     /// <summary>状态类型：paused / idle / watch / throttled。</summary>
     public string StateKind { get; init; } = "idle";
-    public string StateText { get; init; } = "监控中";
+    public string StateText { get; init; } = Loc.T(LK.StateMonitoring);
 
     public bool Paused { get; init; }
     public string IoMode { get; init; } = string.Empty;

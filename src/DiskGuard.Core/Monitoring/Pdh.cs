@@ -15,7 +15,7 @@ internal sealed class PdhQuery : IDisposable
     {
         uint status = NativeMethods.PdhOpenQueryW(null, IntPtr.Zero, out _query);
         if (status != 0)
-            throw new InvalidOperationException($"PdhOpenQuery 失败: 0x{status:X8}");
+            throw new InvalidOperationException($"PdhOpenQuery failed: 0x{status:X8}");
     }
 
     public int CollectCount => _collectCount;
@@ -31,7 +31,7 @@ internal sealed class PdhQuery : IDisposable
     {
         uint status = NativeMethods.PdhCollectQueryData(_query);
         if (status != 0)
-            throw new InvalidOperationException($"PdhCollectQueryData 失败: 0x{status:X8}");
+            throw new InvalidOperationException($"PdhCollectQueryData failed: 0x{status:X8}");
         _collectCount++;
     }
 
@@ -73,7 +73,7 @@ internal sealed class PdhCounter : IDisposable
                 status = NativeMethods.PdhAddCounterW(query, localized, IntPtr.Zero, out handle);
 
             if (status != 0)
-                throw new InvalidOperationException($"PdhAddCounter 失败 [{englishPath}]: 0x{status:X8}");
+            throw new InvalidOperationException($"PdhAddCounter failed [{englishPath}]: 0x{status:X8}");
         }
 
         return new PdhCounter(handle, englishPath);

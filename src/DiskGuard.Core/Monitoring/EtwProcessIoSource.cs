@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using DiskGuard.Core.Localization;
 using Microsoft.Diagnostics.Tracing;
 using Microsoft.Diagnostics.Tracing.Parsers;
 using Microsoft.Diagnostics.Tracing.Parsers.Kernel;
@@ -88,13 +89,13 @@ public sealed class EtwProcessIoSource : IProcessIoSource
         _thread.Start();
     }
 
-    public string Mode => "ETW 精确统计（磁盘 " + _diskNumber + " 实际读写）";
+    public string Mode => Loc.F(LK.IoModeEtwFormat, _diskNumber);
 
     public bool IsPrecise => true;
 
     public bool ProvidesServiceTime => true;
 
-    public string ShareMetricName => "磁盘时间占比";
+    public string ShareMetricName => Loc.T(LK.MetricDiskTime);
 
     public string Error => _error;
 

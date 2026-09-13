@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using DiskGuard.Core.Interop;
+using DiskGuard.Core.Localization;
 using DiskGuard.Core.Logging;
 using DiskGuard.Core.Monitoring;
 using DiskGuard.Core.Throttling;
@@ -47,6 +48,7 @@ internal static class Program
                 case "prio": return Prio(options);
                 case "nttest": return NtTest(options);
                 case "etwdump": return EtwDump(options);
+                case "i18n": return I18n();
                 default:
                     PrintUsage();
                     return 1;
@@ -68,6 +70,28 @@ internal static class Program
         }
     }
 
+    /// <summary>
+    /// 校验多语言词条完整性：列出各语言缺失的词条（发布前/CI 用，缺任何一条都算失败）。
+    /// 用法：DiskGuard.Cli.exe i18n
+    /// </summary>
+    private static int I18n()
+    {
+        int missingTotal = 0;
+        foreach (var (language, code, nativeName) in Loc.Options)
+        {
+            var missing = Loc.MissingKeys(language);
+            missingTotal += missing.Count;
+            Console.WriteLine(missing.Count == 0
+                ? $"OK   {code,-8} {nativeName}"
+                : $"缺失 {code,-8} {nativeName}: {string.Join(", ", missing)}");
+        }
+
+        int keyCount = Enum.GetValues<LK>().Length;
+        Console.WriteLine($"词条总数：{keyCount}");
+        Console.WriteLine(missingTotal == 0 ? "多语言词条完整。" : $"共缺失 {missingTotal} 条词条。");
+        return missingTotal == 0 ? 0 : 1;
+    }
+
     private static void PrintUsage()
     {
         Console.WriteLine("""
@@ -80,6 +104,7 @@ internal static class Program
           prio     --pid N                               读取进程当前 IO/CPU 优先级（自检）
           nttest   --pid N                               诊断 IO 优先级查询的调用方式
           etwdump  [--seconds N]                         打印内核磁盘事件的实际字段（诊断用）
+          i18n                                           校验 6 种界面语言的词条是否齐全
         """);
     }
 
