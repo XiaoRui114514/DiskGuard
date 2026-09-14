@@ -15,6 +15,31 @@ public sealed class GuardEngine : IDisposable
 {
     private const double Mega = 1024.0 * 1024.0;
 
+    /// <summary>
+    /// 二级限速的 IOPS 初始上限。只限吞吐（MB/s）挡不住小 IO：
+    /// 4K 随机读写时进程可能只有几百 KB/s，却因为每秒上万次 IO 把磁盘占满、拖死整个系统，
+    /// 所以限速必须同时压 IO 次数（Windows 会按先到的那个上限执行）。
+    /// </summary>
+    public const long DefaultCapIops = 800;
+
+    /// <summary>IOPS 上限收紧的下限，再低目标进程连正常的小 IO 都做不完。</summary>
+    public const long MinCapIops = 8;
+
+    /// <summary>
+    /// 初始 IOPS 上限：不是固定 800，而是贴着目标当前的 IO 次数往下压到约 2/3。
+    /// 延迟型负载（USB 外置盘、快满的 SSD、大量随机小 IO）占用率很高但 IOPS 并不高：
+    /// 例如 1.4 MB/s、每秒 30 次 IO 就能把外置盘占满，此时给它 800 IOPS 或 30 MB/s 的上限毫无作用，
+    /// 必须按它自己的 IO 次数收紧，才能真正把磁盘时间让出来。
+    /// </summary>
+    private static long InitialIopsCapFor(ProcessIoRow row)
+    {
+        double observed = row.AverageIoCount > 0 ? row.AverageIoCount : row.IoCount;
+        if (observed <= 0) return DefaultCapIops;
+
+        long cap = (long)Math.Ceiling(observed * 2 / 3);
+        return Math.Clamp(cap, MinCapIops, DefaultCapIops);
+    }
+
     /// <summary>保护限速目标状态（_target 及其历史/计数）。界面线程与采样线程都会读写，必须统一加锁。</summary>
     private readonly object _stateSync = new();
     private readonly CancellationTokenSource _cts = new();
@@ -22,6 +47,7 @@ public sealed class GuardEngine : IDisposable
     private readonly List<ActiveThrottleRecord> _records = new();
     private readonly HashSet<int> _activePidScratch = new();
     private readonly List<int> _stalePidScratch = new();
+    private static readonly HashSet<int> NoProtectedPids = new();
 
     private AppSettings _settings;
     private readonly AppLogger _log;
@@ -53,9 +79,12 @@ public sealed class GuardEngine : IDisposable
     private readonly Queue<double> _targetIopsHistory = new();
     private readonly Dictionary<int, PidHistory> _rateHistory = new();
     private long _currentCapBytesPerSec;
+    private long _currentCapIops;
     private bool _capHoldLogged;
     private bool _capFloorLogged;
+    private bool _foregroundHoldLogged;
     private double _lastTargetOccupancyPercent;
+    private string _diskInfoSuffix = string.Empty;
     private DateTime _lastSourceRestart = DateTime.MinValue;
     private long _lastEventCount;
     private DateTime _lastEventGrowth = DateTime.Now;
@@ -63,6 +92,9 @@ public sealed class GuardEngine : IDisposable
     private int _sourceRebuildCount;
     private int _emergencyTicks;
     private DateTime _lastBlockedCleanup = DateTime.MinValue;
+    private int _noThroughputTicks;
+    private DateTime _lastNoThroughputLog = DateTime.MinValue;
+    private DateTime _lastDefragHint = DateTime.MinValue;
 
     private sealed class PidHistory
     {
@@ -102,7 +134,13 @@ public sealed class GuardEngine : IDisposable
         if (Running) return;
         // 全部初始化（PDH、ETW 会话、残留限速还原）都放到工作线程里做，
         // 否则界面线程会被 ETW/磁盘操作阻塞数秒，表现为"点了没反应、打不了字"。
-        _worker = new Thread(WorkerLoop) { IsBackground = true, Name = "DiskGuard-Engine" };
+        // 监控线程用低于正常的优先级：它不是实时任务，不和前台程序抢 CPU。
+        _worker = new Thread(WorkerLoop)
+        {
+            IsBackground = true,
+            Name = "DiskGuard-Engine",
+            Priority = ThreadPriority.BelowNormal
+        };
         _worker.Start();
     }
 
@@ -235,17 +273,20 @@ public sealed class GuardEngine : IDisposable
             _targetLevel = 1;
             _levelAppliedAt = DateTime.Now;
             _currentCapBytesPerSec = (long)Math.Max(1, _settings.RateCapMBps) * (long)Mega;
+            _currentCapIops = DefaultCapIops;
             _capHoldLogged = false;
             _capFloorLogged = false;
+            _foregroundHoldLogged = false;
             _log.Info(Loc.F(LK.EngineManualPriorityDoneFormat, name, pid));
 
             if (_settings.EnableRateCap)
             {
                 long cap = (long)Math.Max(1, _settings.RateCapMBps) * (long)Mega;
-                if (_throttler.ApplyLevel2(handle, cap))
+                if (_throttler.ApplyLevel2(handle, cap, DefaultCapIops))
                 {
                     _targetLevel = 2;
-                    _log.Info(Loc.F(LK.EngineManualCapDoneFormat, name, _settings.RateCapMBps));
+                    _log.Info(Loc.F(LK.EngineManualCapDoneFormat, name, _settings.RateCapMBps) +
+                              Loc.F(LK.EngineIopsCapSuffixFormat, DefaultCapIops));
                 }
                 else
                 {
@@ -278,7 +319,9 @@ public sealed class GuardEngine : IDisposable
             _busyHistory.Clear();
             _capHoldLogged = false;
             _capFloorLogged = false;
+            _foregroundHoldLogged = false;
             _currentCapBytesPerSec = 0;
+            _currentCapIops = 0;
             _targetOccupancyHistory.Clear();
             _targetBytesHistory.Clear();
             _targetIopsHistory.Clear();
@@ -481,6 +524,12 @@ public sealed class GuardEngine : IDisposable
         lock (_stateSync)
         {
             var settings = _settings;
+            // 被限速日志里带上"实际采样的 PDH 实例名 + 该磁盘当时的读写速率"，
+            // 下次再出现"忙率与真实磁盘对不上"时，日志本身就足以定位（见 DiskSampler.GetDisk 的注释）
+            _diskInfoSuffix = disk == null
+                ? string.Empty
+                : Loc.F(LK.EngineDiskInstanceSuffixFormat, disk.InstanceName,
+                    ProcessUtil.FormatRate(disk.ReadBytesPerSec), ProcessUtil.FormatRate(disk.WriteBytesPerSec));
             int foregroundPid = settings.ProtectForeground ? ProcessUtil.GetForegroundProcessId() : 0;
             // 保护对象是"前台程序的整个进程族"：浏览器/Electron/商店应用往往是多进程，
             // 前台窗口和真正读写磁盘的不是同一个 PID，只保护单个 PID 会限速用户正在用的软件。
@@ -491,6 +540,13 @@ public sealed class GuardEngine : IDisposable
             int windowLength = WindowLength();
 
             UpdateRateHistory(rows, windowLength);
+
+            // "忙率很高但没有任何实际吞吐"：多为 SSD 自身回收 / TRIM / 计数器异常。
+            // 这种时候限速任何进程都改善不了磁盘忙率，只会让被限速的程序更卡，
+            // 所以连续 3 秒如此就判定为"不可限速"，不做任何动作（并把已有的自动限速还原）。
+            double diskBytes = (disk?.ReadBytesPerSec ?? 0) + (disk?.WriteBytesPerSec ?? 0);
+            if (busy >= 90 && diskBytes < 64 * 1024 && (disk?.QueueLength ?? 0) < 0.5) _noThroughputTicks++;
+            else _noThroughputTicks = 0;
 
             if (!_paused) RunStateMachine(busy, rows, foregroundPid, protectedPids, now);
 
@@ -539,6 +595,7 @@ public sealed class GuardEngine : IDisposable
                 ActiveRateBytesPerSec = targetRate,
                 ActiveOccupancyPercent = targetOccupancy,
                 ActiveCapBytesPerSec = _target?.CapBytesPerSec ?? 0,
+                ActiveCapIops = _target?.CapIops ?? 0,
                 StateKind = BuildStateKind(),
                 StateText = BuildStateText(),
                 Paused = _paused,
@@ -589,6 +646,25 @@ public sealed class GuardEngine : IDisposable
         else if (low) { _highSince = null; _lowSince ??= now; }
         else { _highSince = null; _lowSince = null; }
 
+        // 见 Tick 里的说明：磁盘没有实际吞吐时不限速，已有自动限速也还原
+        if (_noThroughputTicks >= 3)
+        {
+            if (_target != null && !_target.IsManual)
+            {
+                ReleaseTarget(Loc.T(LK.EngineReasonNoThroughput));
+                return;
+            }
+
+            if (_target == null && now - _lastNoThroughputLog > TimeSpan.FromMinutes(1))
+            {
+                _lastNoThroughputLog = now;
+                _log.Warn(Loc.F(LK.EngineBusyNoThroughputFormat, _settings.DiskNumber, busy) + _diskInfoSuffix);
+            }
+
+            WarnDefragIfRunning(now);
+            return;
+        }
+
         // 目标进程已退出
         if (_target != null && !ProcessAlive(_target.Pid))
         {
@@ -613,16 +689,29 @@ public sealed class GuardEngine : IDisposable
             {
                 // 被限速的程序一旦变成前台程序，或者被用户加入保护名单，立即还原：
                 // 否则用户切过去发现"打字卡、点不动"，而它要等近 30 秒无 IO 才会解除。
-                if (_settings.ProtectForeground && protectedPids.Contains(_target.Pid))
-                {
-                    ReleaseTarget(Loc.T(LK.EngineReasonForeground));
-                    return;
-                }
-
                 if (_settings.IsWhitelisted(_target.Name))
                 {
                     ReleaseTarget(Loc.T(LK.EngineReasonWhitelisted));
                     return;
+                }
+
+                if (_settings.ProtectForeground && protectedPids.Contains(_target.Pid))
+                {
+                    // 紧急满载时不能解除：此刻磁盘 100% 忙，解除后始作俑者立刻把磁盘再占满，
+                    // 用户面前的程序照样打不开、打不了字（旧版本日志里反复"解除→2 秒后再限速"就是这个）。
+                    // 保持限速，等磁盘回落由下面 ControlTarget 正常收尾。
+                    bool emergencyNow = _settings.EnableEmergencyThrottle && busy >= _settings.EmergencyPercent;
+                    if (!emergencyNow)
+                    {
+                        ReleaseTarget(Loc.T(LK.EngineReasonForeground));
+                        return;
+                    }
+
+                    if (!_foregroundHoldLogged)
+                    {
+                        _foregroundHoldLogged = true;
+                        _log.Warn(Loc.F(LK.EngineForegroundHoldFormat, busy, _target.Name) + _diskInfoSuffix);
+                    }
                 }
 
                 ControlTarget(busy, rows, protectedPids, now, high);
@@ -637,13 +726,43 @@ public sealed class GuardEngine : IDisposable
 
         if (emergency && _emergencyTicks >= 2)
         {
+            // 分级挑目标：
+            // 第一级仍要求"真的有 IO 量"（≥512 KB/s 或 ≥4 次 IO/秒），避免磁盘被别的进程压住时，
+            // 把只是"IO 变慢"的无关进程（浏览器 UI、WSL 服务等）抓来限速；
             var urgent = FindCandidate(rows, protectedPids, ignoreBlocked: false,
-                minShareOverride: 5, minRate: Math.Max(minRate, 512 * 1024));
+                minShareOverride: 5, minRate: 512 * 1024, minIopsOverride: 4);
+            bool sacrificeForeground = false;
+            if (urgent == null)
+            {
+                // 第二级：低传输但高占用（大量小 IO、FAT/FUA 落盘、慢速外置盘）——
+               // 系统已经卡到打不开程序时，继续护着前台进程等于谁也不救。
+                // 这次仍然尊重前台保护。
+                urgent = FindCandidate(rows, protectedPids, ignoreBlocked: false,
+                    minShareOverride: 5, minRate: 0, minIopsOverride: 1);
+            }
+            if (urgent == null)
+            {
+                // 第三级：连"保护前台"也让位给"别卡死"。
+                urgent = FindCandidate(rows, NoProtectedPids, ignoreBlocked: false,
+                    minShareOverride: 5, minRate: 512 * 1024, minIopsOverride: 4)
+                    ?? FindCandidate(rows, NoProtectedPids, ignoreBlocked: false,
+                        minShareOverride: 5, minRate: 0, minIopsOverride: 1);
+                sacrificeForeground = urgent != null;
+            }
+
             if (urgent != null)
             {
                 _emergencyTicks = 0;
-                _log.Warn(Loc.F(LK.EngineEmergencyThrottleFormat,
-                    _settings.DiskNumber, busy, _settings.EmergencyPercent, urgent.Name, urgent.Pid));
+                if (sacrificeForeground)
+                {
+                    _log.Warn(Loc.F(LK.EngineEmergencyForegroundFormat,
+                        _settings.DiskNumber, busy, urgent.Name, urgent.Pid) + _diskInfoSuffix);
+                }
+                else
+                {
+                    _log.Warn(Loc.F(LK.EngineEmergencyThrottleFormat,
+                        _settings.DiskNumber, busy, _settings.EmergencyPercent, urgent.Name, urgent.Pid) + _diskInfoSuffix);
+                }
                 Engage(urgent, busy, emergency: true);
                 return;
             }
@@ -658,7 +777,8 @@ public sealed class GuardEngine : IDisposable
             {
                 _warnedUnable = true;
                 _log.Warn(Loc.F(LK.EngineBusyNoCandidateFormat,
-                    _settings.DiskNumber, busy, _settings.TriggerOccupancyPercent));
+                    _settings.DiskNumber, busy, _settings.TriggerOccupancyPercent) + _diskInfoSuffix);
+                WarnDefragIfRunning(now);
             }
             return;
         }
@@ -763,12 +883,15 @@ public sealed class GuardEngine : IDisposable
             long cap = _currentCapBytesPerSec > 0
                 ? _currentCapBytesPerSec
                 : (long)Math.Max(1, _settings.RateCapMBps) * (long)Mega;
+            long capIops = _currentCapIops > 0 ? _currentCapIops : DefaultCapIops;
 
-            if (_throttler.ApplyLevel2(target, cap))
+            if (_throttler.ApplyLevel2(target, cap, capIops))
             {
                 _targetLevel = 2;
+                _currentCapIops = capIops;
                 _levelAppliedAt = now;
-                _log.Info(Loc.F(LK.EngineCapAppliedFormat, target.Name, share, cap / Mega));
+                _log.Info(Loc.F(LK.EngineCapAppliedFormat, target.Name, share, cap / Mega) +
+                          Loc.F(LK.EngineIopsCapSuffixFormat, capIops));
                 PersistRecords();
             }
             else
@@ -783,13 +906,18 @@ public sealed class GuardEngine : IDisposable
         if (_targetLevel >= 2 && _targetLevel < 3)
         {
             long floor = (long)(2 * Mega);
+            long currentIops = _currentCapIops > 0 ? _currentCapIops : DefaultCapIops;
             long next = Math.Max(floor, _currentCapBytesPerSec / 2);
+            long nextIops = Math.Max(MinCapIops, currentIops / 2);
 
-            if (next < _currentCapBytesPerSec && _throttler.ApplyLevel2(target, next))
+            if ((next < _currentCapBytesPerSec || nextIops < currentIops) &&
+                _throttler.ApplyLevel2(target, next, nextIops))
             {
                 _currentCapBytesPerSec = next;
+                _currentCapIops = nextIops;
                 _levelAppliedAt = now;
-                _log.Info(Loc.F(LK.EngineCapTightenedFormat, target.Name, share, next / Mega));
+                _log.Info(Loc.F(LK.EngineCapTightenedFormat, target.Name, share, next / Mega) +
+                          Loc.F(LK.EngineIopsCapSuffixFormat, nextIops));
                 return;
             }
 
@@ -806,7 +934,8 @@ public sealed class GuardEngine : IDisposable
             {
                 _capFloorLogged = true;
                 _log.Warn(Loc.F(LK.EngineCapAtMinimumFormat,
-                    target.Name, _currentCapBytesPerSec / Mega, share));
+                    target.Name, _currentCapBytesPerSec / Mega, share) +
+                    Loc.F(LK.EngineIopsCapSuffixFormat, _currentCapIops));
             }
         }
     }
@@ -946,7 +1075,9 @@ public sealed class GuardEngine : IDisposable
         _busyHistory.Clear();
         _capHoldLogged = false;
         _capFloorLogged = false;
+        _foregroundHoldLogged = false;
         _currentCapBytesPerSec = (long)Math.Max(1, _settings.RateCapMBps) * (long)Mega;
+        _currentCapIops = InitialIopsCapFor(row);
         _targetOccupancyHistory.Clear();
         _targetBytesHistory.Clear();
         _targetIopsHistory.Clear();
@@ -966,27 +1097,28 @@ public sealed class GuardEngine : IDisposable
         _log.Info(Loc.F(LK.EngineAutoThrottleFormat,
             _settings.DiskNumber, busy, handle.Name, handle.Pid,
             row.AverageOccupancyPercent, ProcessUtil.FormatRate(row.TotalBytesPerSec),
-            _settings.TargetOccupancyPercent));
+            _settings.TargetOccupancyPercent) + _diskInfoSuffix);
 
         if (emergency && _settings.EnableRateCap)
         {
             long cap = (long)Math.Max(1, _settings.RateCapMBps) * (long)Mega;
-            if (_throttler.ApplyLevel2(handle, cap))
+            if (_throttler.ApplyLevel2(handle, cap, _currentCapIops))
             {
                 _targetLevel = 2;
                 _levelAppliedAt = DateTime.Now;
-                _log.Warn(Loc.F(LK.EngineEmergencyCapFormat, handle.Name, _settings.RateCapMBps));
+                _log.Warn(Loc.F(LK.EngineEmergencyCapFormat, handle.Name, _settings.RateCapMBps) +
+                          Loc.F(LK.EngineIopsCapSuffixFormat, _currentCapIops));
             }
         }
     }
 
     /// <summary>按"占磁盘忙碌时间百分比"挑选可限速的目标进程。</summary>
     private ProcessIoRow? FindCandidate(List<ProcessIoRow> rows, HashSet<int> protectedPids, bool ignoreBlocked,
-        double? minShareOverride = null, int excludePid = 0, double minRate = 0)
+        double? minShareOverride = null, int excludePid = 0, double minRate = 0, double? minIopsOverride = null)
     {
         double minShare = minShareOverride ?? _settings.TriggerOccupancyPercent;
-        double minIops = _settings.MinIops;
-       DateTime now = DateTime.Now;
+        double minIops = minIopsOverride ?? _settings.MinIops;
+        DateTime now = DateTime.Now;
 
         foreach (var row in rows)
         {
@@ -1027,6 +1159,32 @@ public sealed class GuardEngine : IDisposable
     /// <summary>限速器最近一次错误文本；没有细节时给出“权限不足或进程受保护”。</summary>
     private string ThrottleErrorText() =>
         _throttler.LastErrorText.Length > 0 ? _throttler.LastErrorText : Loc.T(LK.ErrorPermissionOrProtected);
+
+    /// <summary>
+    /// Windows「优化驱动器」在跑（defrag.exe -c -h -o）：这类系统维护的 IO 无法通过限速根治，
+    /// 但它是本机最常见的"长时间全系统卡顿"来源，值得在日志里明确点出来并给出解决办法。
+    /// </summary>
+    private void WarnDefragIfRunning(DateTime now)
+    {
+        if (now - _lastDefragHint < TimeSpan.FromMinutes(5)) return;
+
+        bool running = false;
+        try
+        {
+            var processes = Process.GetProcessesByName("defrag");
+            running = processes.Length > 0;
+            foreach (var process in processes) process.Dispose();
+        }
+        catch
+        {
+            // 查询失败就当没在跑
+        }
+
+        if (!running) return;
+
+        _lastDefragHint = now;
+        _log.Warn(Loc.F(LK.EngineDefragRunningFormat, _settings.DiskNumber) + _diskInfoSuffix);
+    }
 
     /// <summary>目标进程是否仍然存在（列表里没有它的行不代表它已退出，可能只是这一秒没有 IO）。</summary>
     private static bool ProcessAlive(int pid)

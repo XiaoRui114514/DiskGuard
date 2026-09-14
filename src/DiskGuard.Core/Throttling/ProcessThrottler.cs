@@ -92,9 +92,14 @@ public sealed class ProcessThrottler
         return result;
     }
 
-    public bool ApplyLevel2(ThrottleHandle handle, long bytesPerSec)
+    /// <summary>
+    /// 施加作业对象速率上限。<paramref name="maxIops"/> 是必须的：
+    /// 4K 随机等小 IO 场景下，进程可能只有几百 KB/s 却把磁盘占满，
+    /// 只限吞吐（字节/秒）根本拦不住，必须同时限制每秒 IO 次数。
+    /// </summary>
+    public bool ApplyLevel2(ThrottleHandle handle, long bytesPerSec, long maxIops)
     {
-        if (!handle.HasHandle || bytesPerSec <= 0) return false;
+        if (!handle.HasHandle || (bytesPerSec <= 0 && maxIops <= 0)) return false;
 
         if (handle.JobHandle == IntPtr.Zero)
         {
@@ -108,8 +113,8 @@ public sealed class ProcessThrottler
 
         var info = new NativeMethods.JOBOBJECT_IO_RATE_CONTROL_INFORMATION
         {
-            MaxIops = 0,
-            MaxBandwidth = bytesPerSec,
+            MaxIops = Math.Max(0, maxIops),
+            MaxBandwidth = Math.Max(0, bytesPerSec),
             ReservationIops = 0,
             VolumeName = IntPtr.Zero,
             BaseIoSize = 0,
@@ -129,7 +134,8 @@ public sealed class ProcessThrottler
             return false;
         }
 
-        handle.CapBytesPerSec = bytesPerSec;
+        handle.CapBytesPerSec = Math.Max(0, bytesPerSec);
+        handle.CapIops = Math.Max(0, maxIops);
         handle.IsLevel2 = true;
         handle.Level = 2;
         LastError = 0;
@@ -141,6 +147,7 @@ public sealed class ProcessThrottler
         DisableJobRateControl(handle);
         handle.IsLevel2 = false;
         handle.CapBytesPerSec = 0;
+        handle.CapIops = 0;
         if (handle.Level >= 2) handle.Level = 1;
     }
 

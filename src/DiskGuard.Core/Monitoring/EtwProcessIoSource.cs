@@ -84,7 +84,9 @@ public sealed class EtwProcessIoSource : IProcessIoSource
         _thread = new Thread(RunSession)
         {
             IsBackground = true,
-            Name = "DiskGuard-Etw"
+            Name = "DiskGuard-Etw",
+            // 监控线程不该和前台程序抢 CPU：磁盘已经满载时，工具自己再抢一个核只会更卡
+            Priority = ThreadPriority.BelowNormal
         };
         _thread.Start();
     }

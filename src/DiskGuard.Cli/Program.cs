@@ -99,7 +99,9 @@ internal static class Program
           sample   [--seconds N] [--disk X]              打印磁盘忙率与进程磁盘速率排行
           etwtest  [--seconds N] [--disk X]              仅测试 ETW 精确统计
           load     [--mb N] [--seconds N] [--read]       生成磁盘负载（测试用，结束自动删除临时文件）
-          throttle --pid N [--cap MB] [--seconds N]      对指定进程限速并在结束后还原
+                   [--random] [--path 文件]             4K 随机写（FUA），模拟浏览器/聊天软件数据库的小 IO
+          throttle --pid N [--cap MB] [--iops N] [--seconds N]
+                                                        对指定进程限速并在结束后还原
                    [--io 0|1] [--no-cpu] [--suspend 运行ms:挂起ms]
           prio     --pid N                               读取进程当前 IO/CPU 优先级（自检）
           nttest   --pid N                               诊断 IO 优先级查询的调用方式
@@ -493,6 +495,7 @@ internal static class Program
         }
 
         double capMB = GetDouble(options, "cap", -1);
+        int iops = GetInt(options, "iops", (int)DiskGuard.Core.Engine.GuardEngine.DefaultCapIops);
         int seconds = GetInt(options, "seconds", 15);
         int ioPriority = GetInt(options, "io", 0);
         bool lowerCpu = !options.ContainsKey("no-cpu");
@@ -522,9 +525,9 @@ internal static class Program
         if (capMB > 0)
         {
             long cap = (long)(capMB * 1024 * 1024);
-            level2 = throttler.ApplyLevel2(handle, cap);
+            level2 = throttler.ApplyLevel2(handle, cap, iops);
             Console.WriteLine(level2
-                ? $"  二级限速已应用: 吞吐上限 {capMB:0.#} MB/s"
+                ? $"  二级限速已应用: 吞吐上限 {capMB:0.#} MB/s + {iops} IOPS"
                 : $"  二级限速失败: {throttler.LastErrorText} (err={throttler.LastError})");
         }
 

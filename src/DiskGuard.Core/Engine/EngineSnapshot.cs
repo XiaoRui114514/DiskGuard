@@ -58,6 +58,7 @@ public sealed class EngineSnapshot
     public DateTime? ActiveSince { get; init; }
     public double ActiveRateBytesPerSec { get; init; }
     public long ActiveCapBytesPerSec { get; init; }
+    public long ActiveCapIops { get; init; }
 
     /// <summary>状态类型：paused / idle / watch / throttled。</summary>
     public string StateKind { get; init; } = "idle";

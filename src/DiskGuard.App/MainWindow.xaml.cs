@@ -158,7 +158,10 @@ public partial class MainWindow : Window
             string level = snapshot.ActiveLevel switch
             {
                 3 => Loc.T(LK.ThrottleLevelSuspend),
-                2 => Loc.F(LK.ThrottleLevelCapFormat, snapshot.ActiveCapBytesPerSec / 1024.0 / 1024.0),
+                2 => snapshot.ActiveCapIops > 0
+                    ? Loc.F(LK.ThrottleLevelCapIopsFormat,
+                        snapshot.ActiveCapBytesPerSec / 1024.0 / 1024.0, snapshot.ActiveCapIops)
+                    : Loc.F(LK.ThrottleLevelCapFormat, snapshot.ActiveCapBytesPerSec / 1024.0 / 1024.0),
                 _ => Loc.T(LK.ThrottleLevelPriority)
             };
             TargetText.Text = Loc.F(LK.TargetThrottledFormat,

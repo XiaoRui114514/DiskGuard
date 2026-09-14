@@ -15,7 +15,12 @@ public static class ProcessUtil
     {
         "system", "registry", "idle", "memory compression", "secure system",
         "smss", "csrss", "wininit", "winlogon", "services", "lsass",
-        "dwm", "audiodg", "fontdrvhost", "wudfhost", "memory"
+        "dwm", "audiodg", "fontdrvhost", "wudfhost", "memory",
+        // Windows 外壳 / 输入 / 会话相关：限速它们会直接表现为"桌面无响应、打不开程序、打不了字"，
+        // 属于用户抱怨的"整个系统卡死"里最不该碰的一批进程，任何情况下都不限速它们。
+        "explorer", "sihost", "userinit", "logonui", "taskhostw",
+        "startmenuexperiencehost", "shellexperiencehost", "searchhost",
+        "textinputhost", "ctfmon", "applicationframehost", "consent"
     };
 
     public static bool IsSystemCritical(string processName)

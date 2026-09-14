@@ -85,9 +85,21 @@ public sealed class DiskSampler : IDisposable
     {
         lock (_sync)
         {
-            var exact = _current.FirstOrDefault(d => d.DiskNumber == diskNumber);
-            if (exact != null) return exact;
-            return _current.FirstOrDefault(d => d.DiskNumber == 0) ?? _current.FirstOrDefault();
+            foreach (var status in _current)
+            {
+                if (status.DiskNumber == diskNumber) return status;
+            }
+
+            // 这一次采样里没有目标磁盘（PDH 偶发丢样本 / 磁盘刚被拔出）：
+            // 只有"所有实例都解析不出磁盘编号"时才退回第一块，避免整个工具失效；
+            // 只要能解析出编号就绝不拿别的磁盘顶替——否则会出现"监控磁盘 0，实际读的是磁盘 1 的忙率"，
+            // 于是把一个空闲磁盘报成 100% 忙，并据此去限速无辜的进程。
+            foreach (var status in _current)
+            {
+                if (status.DiskNumber >= 0) return null;
+            }
+
+            return _current.FirstOrDefault();
         }
     }
 

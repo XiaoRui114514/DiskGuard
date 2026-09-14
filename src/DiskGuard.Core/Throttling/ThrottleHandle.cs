@@ -19,6 +19,7 @@ public sealed class ThrottleHandle
     internal IntPtr JobHandle { get; set; } = IntPtr.Zero;
     public bool IsLevel2 { get; internal set; }
     public long CapBytesPerSec { get; internal set; }
+    public long CapIops { get; internal set; }
 
     public bool IsLevel3 { get; internal set; }
     internal CancellationTokenSource? SuspendCts { get; set; }
