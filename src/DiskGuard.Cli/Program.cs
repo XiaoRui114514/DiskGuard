@@ -305,7 +305,7 @@ internal static class Program
 
             samples = samples.OrderByDescending(Occupancy).ToList();
 
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {status?.DisplayName ?? "磁盘" + disk} 忙率 {status?.BusyPercent ?? 0:0.0}%  队列 {status?.QueueLength ?? 0:0.00}  读 {ProcessUtil.FormatRate(status?.ReadBytesPerSec ?? 0)}  写 {ProcessUtil.FormatRate(status?.WriteBytesPerSec ?? 0)}");
+            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {status?.DisplayName ?? "磁盘" + disk} 忙率 {status?.BusyPercent ?? 0:0.0}%  队列 {status?.QueueLength ?? 0:0.00}  响应 {(status?.LatencyValid == true ? $"{status.LatencyMs:0.#} ms" : "?")}  读 {ProcessUtil.FormatRate(status?.ReadBytesPerSec ?? 0)}  写 {ProcessUtil.FormatRate(status?.WriteBytesPerSec ?? 0)}");
             int shown = 0;
             foreach (var sample in samples)
             {
@@ -552,7 +552,7 @@ internal static class Program
             var disk = sampler.GetDisk(0);
             var samples = ioSource.Snapshot(1.0);
             var target = samples.FirstOrDefault(s => s.Pid == pid);
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 磁盘0 忙率 {disk?.BusyPercent ?? 0,5:0.0}%  目标进程 {ProcessUtil.FormatRate(target?.TotalBytesPerSec ?? 0),-12} {(target == null ? "(无活动)" : "")}");
+            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 磁盘0 忙率 {disk?.BusyPercent ?? 0,5:0.0}%  响应 {(disk?.LatencyValid == true ? $"{disk.LatencyMs:0.#} ms" : "?")}  目标进程 {ProcessUtil.FormatRate(target?.TotalBytesPerSec ?? 0),-12} {(target == null ? "(无活动)" : "")}");
         }
 
         throttler.Release(handle);

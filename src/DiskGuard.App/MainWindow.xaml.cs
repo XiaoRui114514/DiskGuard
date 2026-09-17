@@ -135,7 +135,8 @@ public partial class MainWindow : Window
             snapshot.QueueLength, Loc.Value(ProcessUtil.FormatRate(snapshot.ReadBytesPerSec)),
             Loc.Value(ProcessUtil.FormatRate(snapshot.WriteBytesPerSec)),
             snapshot.TriggerPercent, snapshot.RecoverPercent,
-            snapshot.TriggerOccupancyPercent, snapshot.TargetOccupancyPercent);
+            snapshot.TriggerOccupancyPercent, snapshot.TargetOccupancyPercent,
+            snapshot.LatencyMs >= 0 ? $"{snapshot.LatencyMs:0.#} ms" : "-");
 
         StateText.Text = snapshot.StateText;
         StateBadge.Background = snapshot.StateKind switch

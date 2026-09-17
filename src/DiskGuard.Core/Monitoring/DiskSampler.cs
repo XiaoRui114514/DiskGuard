@@ -12,6 +12,15 @@ public sealed class DiskStatus
     public double ReadBytesPerSec { get; set; }
     public double WriteBytesPerSec { get; set; }
 
+    /// <summary>平均每次读写操作的响应时间（秒），即 PDH 的 Avg. Disk sec/Transfer。</summary>
+    public double LatencySeconds { get; set; }
+
+    /// <summary>本次采样里有没有读到响应时间计数器（读不到时界面和判定都退回"未知"）。</summary>
+    public bool LatencyValid { get; set; }
+
+    /// <summary>平均响应时间（毫秒）。卡死时通常是几百毫秒到几秒。</summary>
+    public double LatencyMs => LatencySeconds * 1000.0;
+
     public string DisplayName
     {
         get
@@ -32,6 +41,7 @@ public sealed class DiskSampler : IDisposable
     private readonly PdhCounter _queueCounter;
     private readonly PdhCounter _readCounter;
     private readonly PdhCounter _writeCounter;
+    private readonly PdhCounter? _latencyCounter;
     private readonly object _sync = new();
     private readonly Dictionary<string, DiskStatus> _statusByInstance = new();
     private List<DiskStatus> _current = new();
@@ -42,6 +52,11 @@ public sealed class DiskSampler : IDisposable
         _queueCounter = _query.AddCounter(@"\PhysicalDisk(*)\Avg. Disk Queue Length");
         _readCounter = _query.AddCounter(@"\PhysicalDisk(*)\Disk Read Bytes/sec");
         _writeCounter = _query.AddCounter(@"\PhysicalDisk(*)\Disk Write Bytes/sec");
+        // 响应时间是判断"磁盘真的卡住"还是"忙率虚高"的关键指标：忙率 100% 但响应只有几毫秒，
+        // 说明磁盘其实跟得上（限速它反而帮倒忙）；响应几百毫秒才是用户能感觉到的卡。
+        // 个别系统没有这个计数器，取不到就退化成"响应未知"，不影响其它判定。
+        try { _latencyCounter = _query.AddCounter(@"\PhysicalDisk(*)\Avg. Disk sec/Transfer"); }
+        catch { _latencyCounter = null; }
         _query.Collect();
     }
 
@@ -54,6 +69,7 @@ public sealed class DiskSampler : IDisposable
         var queue = _queueCounter.ReadArray();
         var read = _readCounter.ReadArray();
         var write = _writeCounter.ReadArray();
+        var latency = _latencyCounter?.ReadArray() ?? new List<(string, double)>();
 
         var list = new List<DiskStatus>(idle.Count);
         foreach (var (instance, idleValue) in idle)
@@ -69,6 +85,16 @@ public sealed class DiskSampler : IDisposable
             status.QueueLength = Lookup(queue, instance);
             status.ReadBytesPerSec = Lookup(read, instance);
             status.WriteBytesPerSec = Lookup(write, instance);
+            if (TryLookup(latency, instance, out double latencySeconds))
+            {
+                status.LatencySeconds = Math.Clamp(latencySeconds, 0, 60);
+                status.LatencyValid = true;
+            }
+            else
+            {
+                status.LatencySeconds = 0;
+                status.LatencyValid = false;
+            }
             list.Add(status);
         }
 
@@ -109,6 +135,19 @@ public sealed class DiskSampler : IDisposable
             if (string.Equals(item.Instance, instance, StringComparison.OrdinalIgnoreCase))
                 return item.Value;
         return 0;
+    }
+
+    private static bool TryLookup(List<(string Instance, double Value)> source, string instance, out double value)
+    {
+        foreach (var item in source)
+        {
+            if (!string.Equals(item.Instance, instance, StringComparison.OrdinalIgnoreCase)) continue;
+            value = item.Value;
+            return true;
+        }
+
+        value = 0;
+        return false;
     }
 
     private static DiskStatus ParseInstance(string instance)

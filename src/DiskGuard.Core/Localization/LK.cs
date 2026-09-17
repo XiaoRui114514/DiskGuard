@@ -242,6 +242,8 @@ public enum LK
     EngineIdleReleaseFormat,
     EngineHeavierTargetFormat,
     EngineTargetSatisfiedFormat,
+    EngineBusyReliefFormat,
+    EngineCapIneffectiveFormat,
     EngineCapDisabledHintFormat,
     EngineCapAppliedFormat,
     EngineCapUnsupportedFormat,

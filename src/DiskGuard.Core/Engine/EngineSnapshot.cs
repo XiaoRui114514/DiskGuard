@@ -46,6 +46,9 @@ public sealed class EngineSnapshot
     public double QueueLength { get; init; }
     public double ReadBytesPerSec { get; init; }
     public double WriteBytesPerSec { get; init; }
+
+    /// <summary>磁盘平均响应时间（毫秒）；-1 表示本机读不到这个计数器。</summary>
+    public double LatencyMs { get; init; } = -1;
     public IReadOnlyList<DiskStatus> Disks { get; init; } = Array.Empty<DiskStatus>();
     public int DiskNumber { get; init; }
     public string DiskLabel { get; init; } = string.Empty;
