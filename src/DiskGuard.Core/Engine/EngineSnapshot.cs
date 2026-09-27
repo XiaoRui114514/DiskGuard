@@ -15,10 +15,13 @@ public sealed class ProcessIoRow
     /// <summary>窗口平均速率（用于判定是否值得限速，避免瞬时尖峰误伤）。</summary>
     public double AverageBytesPerSec { get; set; }
 
+    /// <summary>最近一个采样间隔内的实际读写速率；限速目标必须当前仍有足够负载。</summary>
+    public double CurrentBytesPerSec { get; set; }
+
     /// <summary>窗口内累计磁盘服务时间（毫秒）。</summary>
     public double ServiceTimeMs { get; set; }
 
-    /// <summary>窗口内磁盘 IO 次数。</summary>
+    /// <summary>采样间隔内的磁盘 IO 次数（次/秒）。</summary>
     public double IoCount { get; set; }
 
     /// <summary>该进程让磁盘忙碌的时间百分比（0-100），核心判定指标。</summary>
@@ -29,6 +32,9 @@ public sealed class ProcessIoRow
 
     /// <summary>窗口平均 IO 次数（次/秒）。</summary>
     public double AverageIoCount { get; set; }
+
+    /// <summary>最近一个采样间隔内的实际 IO 次数（次/秒）。</summary>
+    public double CurrentIoCount { get; set; }
 
     /// <summary>界面标记：已限速 / 系统内核 / 保护名单 / 前台程序 / 空。</summary>
     public string Tag { get; set; } = string.Empty;

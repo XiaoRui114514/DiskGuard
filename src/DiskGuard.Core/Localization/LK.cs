@@ -230,6 +230,7 @@ public enum LK
     EngineReasonForeground,
     EngineReasonWhitelisted,
     EngineReasonNoThroughput,
+    EngineReasonDiskRecoveredFormat,
     EngineReasonSwitchHeavier,
     EngineReasonSwitchDisk,
     EngineReasonManualSwitch,

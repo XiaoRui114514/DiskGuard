@@ -8,11 +8,17 @@ public sealed class ProcessIoSample
     public double WriteBytesPerSec { get; init; }
     public double TotalBytesPerSec => ReadBytesPerSec + WriteBytesPerSec;
 
+    /// <summary>仅最近一个采样间隔内的实际读写速率，用于阻止旧的窗口平均值触发限速。</summary>
+    public double CurrentBytesPerSec { get; init; }
+
     /// <summary>窗口内累计的磁盘服务时间（毫秒），用于计算"占磁盘忙碌时间的比例"。</summary>
     public double ServiceTimeMs { get; init; }
 
-    /// <summary>窗口内的磁盘 IO 次数。</summary>
+    /// <summary>采样窗口内平均 IO 次数（次/秒）。</summary>
     public double IoCount { get; init; }
+
+    /// <summary>仅最近一个采样间隔内的实际 IO 次数（次/秒）。</summary>
+    public double CurrentIoCount { get; init; }
 }
 
 /// <summary>按进程提供磁盘读写速率的数据源。</summary>

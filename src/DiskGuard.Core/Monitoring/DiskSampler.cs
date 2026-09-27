@@ -81,6 +81,10 @@ public sealed class DiskSampler : IDisposable
                 _statusByInstance[instance] = status;
             }
 
+            // _Total 是 Windows 把多块盘合并后的实例，不能用于单盘硬上限判断。
+            // 未能解析出物理盘编号的实例也不参与监控，避免拿它冒充用户选中的磁盘。
+            if (status.DiskNumber < 0) continue;
+
             status.BusyPercent = Math.Clamp(100.0 - idleValue, 0.0, 100.0);
             status.QueueLength = Lookup(queue, instance);
             status.ReadBytesPerSec = Lookup(read, instance);
@@ -116,16 +120,8 @@ public sealed class DiskSampler : IDisposable
                 if (status.DiskNumber == diskNumber) return status;
             }
 
-            // 这一次采样里没有目标磁盘（PDH 偶发丢样本 / 磁盘刚被拔出）：
-            // 只有"所有实例都解析不出磁盘编号"时才退回第一块，避免整个工具失效；
-            // 只要能解析出编号就绝不拿别的磁盘顶替——否则会出现"监控磁盘 0，实际读的是磁盘 1 的忙率"，
-            // 于是把一个空闲磁盘报成 100% 忙，并据此去限速无辜的进程。
-            foreach (var status in _current)
-            {
-                if (status.DiskNumber >= 0) return null;
-            }
-
-            return _current.FirstOrDefault();
+            // 目标实例缺样时不回退到其它盘或 _Total，防止把别的磁盘忙率误当成当前盘。
+            return null;
         }
     }
 

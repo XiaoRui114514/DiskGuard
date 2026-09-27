@@ -221,6 +221,10 @@ public sealed class EtwProcessIoSource : IProcessIoSource
             var window = pair.Value.Window;
             if (window.Count == 0) continue;
 
+            var current = deltas.TryGetValue(pair.Key, out var delta)
+                ? delta
+                : (Read: 0d, Write: 0d, Iops: 0d, ServiceMs: 0d);
+
             // 手写累加：这段每秒对每个进程都会跑一遍，LINQ 的委托/迭代器分配没必要
             double readSum = 0, writeSum = 0, iopsSum = 0, serviceSum = 0;
             foreach (var item in window)
@@ -253,8 +257,10 @@ public sealed class EtwProcessIoSource : IProcessIoSource
                 Pid = pair.Key,
                 ReadBytesPerSec = readAvg,
                 WriteBytesPerSec = writeAvg,
+                CurrentBytesPerSec = current.Read + current.Write,
                 ServiceTimeMs = serviceAvg,
-                IoCount = iopsAvg
+                IoCount = iopsAvg,
+                CurrentIoCount = current.Iops
             });
         }
 

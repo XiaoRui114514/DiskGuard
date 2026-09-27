@@ -60,7 +60,9 @@ public sealed class IoCountersProcessIoSource : IProcessIoSource
                                 Name = name,
                                 ReadBytesPerSec = read / seconds,
                                 WriteBytesPerSec = write / seconds,
-                                IoCount = readOps + writeOps
+                                CurrentBytesPerSec = (read + write) / seconds,
+                                IoCount = ((double)readOps + writeOps) / seconds,
+                                CurrentIoCount = ((double)readOps + writeOps) / seconds
                             });
                         }
                     }

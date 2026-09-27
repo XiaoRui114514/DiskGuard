@@ -86,6 +86,7 @@ public partial class MainWindow : Window
 
         // 日志行的“级别”是按当前语言渲染的，切语言后重建一次列表
         RebuildLogList();
+        foreach (var row in _rowMap.Values) row.RefreshDisplayTexts();
     }
 
     private void OnSnapshot(EngineSnapshot snapshot)
@@ -194,6 +195,10 @@ public partial class MainWindow : Window
                 _applyingSettings = false;
             }
         }
+
+        // 设置页输入时不必每秒重排进程表；窗口隐藏到托盘时也暂停列表绑定更新。
+        // 其他卡片仍正常刷新，重新显示进程页后下一份快照会补齐最新排行。
+        if (!ProcessGrid.IsVisible) return;
 
         // 更新进程行（原地更新，避免闪烁）
         var seen = new HashSet<int>();

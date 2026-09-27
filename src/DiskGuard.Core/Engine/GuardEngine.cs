@@ -56,13 +56,6 @@ public sealed class GuardEngine : IDisposable
     private const double MinLoadIops = 100;
 
     /// <summary>
-    /// 紧急模式下"牺牲前台程序"的门槛：前台程序自己也得是真正的占用大户才值得限速，
-    /// 否则就是"用户正在打字的窗口被莫名卡一下"（旧版本实测：占用 21% 的前台程序被限速，
-    /// 下一拍又因为前台保护还原，用户只感受到一次卡顿）。
-    /// </summary>
-    private const double ForegroundSacrificeMinShare = 50;
-
-    /// <summary>
     /// 忙率虚高的判定要用到响应时间：忙率 ≥90% 却没有吞吐、队列为空、响应时间也正常（&lt; 20 ms），
     /// 说明磁盘其实没在干活（计数器异常 / SSD 内部动作），限速任何进程都改善不了。
     /// 反过来，如果响应时间很长，说明磁盘是真的在拖后腿，就该照常挑目标限速。
@@ -82,6 +75,15 @@ public sealed class GuardEngine : IDisposable
     /// </summary>
     private const double BusyImprovementPercent = 1;
 
+    /// <summary>单块监控磁盘的忙率硬上限；达到此值时前台保护让位于恢复磁盘可用性。</summary>
+    private const double DiskBusyHardLimitPercent = 98;
+
+    /// <summary>硬上限触发后，所选磁盘连续两个采样不高于此值才解除自动限速。</summary>
+    private const double DiskBusyRecoveryPercent = 95;
+    private const int DiskBusyRecoverySamples = 2;
+
+    private static readonly HashSet<int> NoProtectedPids = new();
+
     /// <summary>保护限速目标状态（_target 及其历史/计数）。界面线程与采样线程都会读写，必须统一加锁。</summary>
     private readonly object _stateSync = new();
     private readonly CancellationTokenSource _cts = new();
@@ -89,7 +91,6 @@ public sealed class GuardEngine : IDisposable
     private readonly List<ActiveThrottleRecord> _records = new();
     private readonly HashSet<int> _activePidScratch = new();
     private readonly List<int> _stalePidScratch = new();
-    private static readonly HashSet<int> NoProtectedPids = new();
 
     private AppSettings _settings;
     private readonly AppLogger _log;
@@ -108,6 +109,7 @@ public sealed class GuardEngine : IDisposable
     private DateTime? _highSince;
     private DateTime? _lowSince;
     private ThrottleHandle? _target;
+    private bool _hardLimitTarget;
     private DateTime _nextInitRetry = DateTime.MinValue;
     private int _targetLevel;
     private DateTime _levelAppliedAt = DateTime.MinValue;
@@ -127,7 +129,6 @@ public sealed class GuardEngine : IDisposable
     private bool _capIneffectiveLogged;
     /// <summary>上一次收紧上限时的忙率（滑动平均）；用于判断"继续收紧还有没有用"，-1 表示还没收紧过。</summary>
     private double _busyBeforeLastTighten = -1;
-    private bool _foregroundHoldLogged;
     private double _lastTargetOccupancyPercent;
     private string _diskInfoSuffix = string.Empty;
     private DateTime _lastSourceRestart = DateTime.MinValue;
@@ -315,13 +316,13 @@ public sealed class GuardEngine : IDisposable
 
             handle.IsManual = true;
             _target = handle;
+            _hardLimitTarget = false;
             _targetLevel = 1;
             _levelAppliedAt = DateTime.Now;
             _currentCapBytesPerSec = (long)Math.Max(1, _settings.RateCapMBps) * (long)Mega;
             _currentCapIops = DefaultCapIops;
             _capHoldLogged = false;
             _capFloorLogged = false;
-            _foregroundHoldLogged = false;
             _log.Info(Loc.F(LK.EngineManualPriorityDoneFormat, name, pid));
 
             if (_settings.EnableRateCap)
@@ -357,6 +358,7 @@ public sealed class GuardEngine : IDisposable
 
             RemoveRecord(target.Pid);
             _target = null;
+            _hardLimitTarget = false;
             _targetLevel = 0;
             _idleTargetTicks = 0;
             _pendingPid = -1;
@@ -366,7 +368,6 @@ public sealed class GuardEngine : IDisposable
             _capFloorLogged = false;
             _capIneffectiveLogged = false;
             _busyBeforeLastTighten = -1;
-            _foregroundHoldLogged = false;
             _currentCapBytesPerSec = 0;
             _currentCapIops = 0;
             _targetOccupancyHistory.Clear();
@@ -550,8 +551,10 @@ public sealed class GuardEngine : IDisposable
                 Name = name,
                 ReadBytesPerSec = sample.ReadBytesPerSec,
                 WriteBytesPerSec = sample.WriteBytesPerSec,
+                CurrentBytesPerSec = sample.CurrentBytesPerSec,
                 ServiceTimeMs = sample.ServiceTimeMs,
-                IoCount = sample.IoCount
+                IoCount = sample.IoCount,
+                CurrentIoCount = sample.CurrentIoCount
             });
         }
 
@@ -596,7 +599,11 @@ public sealed class GuardEngine : IDisposable
             double diskBytes = (disk?.ReadBytesPerSec ?? 0) + (disk?.WriteBytesPerSec ?? 0);
             bool latencyKnown = disk?.LatencyValid == true;
             bool latencyFast = !latencyKnown || disk!.LatencyMs < BogusBusyLatencyMs;
-            if (busy >= 90 && diskBytes < 64 * 1024 && (disk?.QueueLength ?? 0) < 0.5 && latencyFast) _noThroughputTicks++;
+            // ETW 精确绑定所选物理盘；PDH 偶发报 0 时，只要 ETW 仍看到该盘上的 IO，
+            // 就不能把它当成 SSD 空转并撤销限速（近期日志出现过忙率 100%、ETW 98.4% 但 PDH 读写为 0）。
+            bool preciseDiskActivity = source.IsPrecise && rows.Any(r => r.CurrentBytesPerSec > 0 || r.CurrentIoCount > 0);
+            if (busy >= 90 && diskBytes < 64 * 1024 && (disk?.QueueLength ?? 0) < 0.5 && latencyFast && !preciseDiskActivity)
+                _noThroughputTicks++;
             else _noThroughputTicks = 0;
 
             if (!_paused) RunStateMachine(busy, rows, foregroundPid, protectedPids, now);
@@ -698,6 +705,8 @@ public sealed class GuardEngine : IDisposable
         else if (low) { _highSince = null; _lowSince ??= now; }
         else { _highSince = null; _lowSince = null; }
 
+        bool hardPressure = busy >= DiskBusyHardLimitPercent;
+
         // 见 Tick 里的说明：磁盘没有实际吞吐时不限速，已有自动限速也还原
         if (_noThroughputTicks >= 3)
         {
@@ -725,6 +734,7 @@ public sealed class GuardEngine : IDisposable
             _throttler.Release(exited);
             RemoveRecord(exited.Pid);
             _target = null;
+            _hardLimitTarget = false;
             _targetLevel = 0;
             PersistRecords();
             // 目标退出后重新累积窗口，避免立即误伤无关进程
@@ -739,78 +749,64 @@ public sealed class GuardEngine : IDisposable
         {
             if (!_target.IsManual)
             {
-                // 被限速的程序一旦变成前台程序，或者被用户加入保护名单，立即还原：
-                // 否则用户切过去发现"打字卡、点不动"，而它要等近 30 秒无 IO 才会解除。
+                if (hardPressure) _hardLimitTarget = true;
+
+                // 被限速的程序一旦被用户加入保护名单，立即还原。
                 if (_settings.IsWhitelisted(_target.Name))
                 {
                     ReleaseTarget(Loc.T(LK.EngineReasonWhitelisted));
                     return;
                 }
 
-                if (_settings.ProtectForeground && protectedPids.Contains(_target.Pid))
+                // 硬上限期间即使目标成为前台也继续限速；降到安全区并稳定后再还原。
+                // 普通负载下仍遵守前台保护，用户切回窗口即可立即恢复。
+                if (!_hardLimitTarget && _settings.ProtectForeground && protectedPids.Contains(_target.Pid))
                 {
-                    // 紧急满载时不能解除：此刻磁盘 100% 忙，解除后始作俑者立刻把磁盘再占满，
-                    // 用户面前的程序照样打不开、打不了字（旧版本日志里反复"解除→2 秒后再限速"就是这个）。
-                    // 保持限速，等磁盘回落由下面 ControlTarget 正常收尾。
-                    bool emergencyNow = _settings.EnableEmergencyThrottle && busy >= _settings.EmergencyPercent;
-                    if (!emergencyNow)
-                    {
-                        ReleaseTarget(Loc.T(LK.EngineReasonForeground));
-                        return;
-                    }
-
-                    if (!_foregroundHoldLogged)
-                    {
-                        _foregroundHoldLogged = true;
-                        _log.Warn(Loc.F(LK.EngineForegroundHoldFormat, busy, _target.Name) + _diskInfoSuffix);
-                    }
+                    ReleaseTarget(Loc.T(LK.EngineReasonForeground));
+                    return;
                 }
 
-                ControlTarget(busy, rows, protectedPids, now, high);
+                // 紧急限速只需把磁盘忙率压到安全区，不必继续等待进程自身 IO 归零。
+                int hardRecoverySamples = DiskBusyRecoverySamples;
+                if (_hardLimitTarget && _busyHistory.Count >= hardRecoverySamples &&
+                    WindowMax(hardRecoverySamples) <= DiskBusyRecoveryPercent)
+                {
+                    ReleaseTarget(Loc.F(LK.EngineReasonDiskRecoveredFormat,
+                        _settings.DiskNumber, DiskBusyRecoveryPercent));
+                    return;
+                }
+
+                ControlTarget(busy, rows, protectedPids, now, high, hardPressure);
             }
             return;
         }
 
-        // 紧急保护：忙率到顶时直接限速（不等 5 秒窗口、不校验占比），用于防止电脑突然卡死
-        bool emergency = _settings.EnableEmergencyThrottle && busy >= _settings.EmergencyPercent;
+        // 单盘忙率 98% 是硬上限，不受“紧急保护”开关和前台保护设置影响；
+        // 用户把紧急阈值设得更低时，也可以更早进入保护。
+        bool emergency = hardPressure || (_settings.EnableEmergencyThrottle && busy >= _settings.EmergencyPercent);
         if (emergency) _emergencyTicks++;
         else _emergencyTicks = 0;
 
         // 忙率到顶、磁盘却几乎没有实际读写、响应时间也正常时（SSD 自身回收 / TRIM / 计数器异常），
         // 限速任何进程都改善不了：这里直接不进入限速，避免"限速 → 1 秒后又还原"的空转。
-        if (emergency && _emergencyTicks >= 2 && _noThroughputTicks == 0)
+        if (emergency && (hardPressure || _emergencyTicks >= 2) && _noThroughputTicks == 0)
         {
-            // 分级挑目标：
-            // 第一级要求"真的有吞吐"，避免磁盘被别的进程压住时，
-            // 把只是"IO 变慢"的无关进程（浏览器 UI、WSL 服务等）抓来限速；
-            // （无论走哪一级，FindCandidate 都会先挡掉"自身 IO 量太小、限速也没用"的候选）
-            var urgent = FindCandidate(rows, protectedPids, ignoreBlocked: false,
+            // 达到硬上限时允许挑选前台进程，但仍只挑当前确实在产生磁盘 IO 的负载源；
+            // 输入法、桌面关键进程和用户保护名单仍由 FindCandidate 内部硬保护。
+            var emergencyProtectedPids = hardPressure ? NoProtectedPids : protectedPids;
+            var urgent = FindCandidate(rows, emergencyProtectedPids, ignoreBlocked: false,
                 minShareOverride: 5, minRate: 512 * 1024, minIopsOverride: 4);
-            bool sacrificeForeground = false;
             if (urgent == null)
             {
                 // 第二级：低传输但高占用（大量小 IO、FAT/FUA 落盘、慢速外置盘）——
-               // 系统已经卡到打不开程序时，继续护着前台进程等于谁也不救。
-                // 这次仍然尊重前台保护。
-                urgent = FindCandidate(rows, protectedPids, ignoreBlocked: false,
+                // 允许真正的高频小 IO 负载入选。
+                urgent = FindCandidate(rows, emergencyProtectedPids, ignoreBlocked: false,
                     minShareOverride: 5, minRate: 0, minIopsOverride: 1);
             }
-            if (urgent == null)
-            {
-                // 第三级：连"保护前台"也让位给"别卡死"（但"自身 IO 量太小"这条仍然有效）。
-                // 门槛比前两级更高：前台程序自己得占到一半以上的磁盘忙碌时间才值得动它，
-                // 否则就是在用户正在打字的窗口上白卡一下。
-                urgent = FindCandidate(rows, NoProtectedPids, ignoreBlocked: false,
-                    minShareOverride: ForegroundSacrificeMinShare, minRate: 512 * 1024, minIopsOverride: 4)
-                    ?? FindCandidate(rows, NoProtectedPids, ignoreBlocked: false,
-                        minShareOverride: ForegroundSacrificeMinShare, minRate: 0, minIopsOverride: 1);
-                sacrificeForeground = urgent != null;
-            }
-
             if (urgent != null)
             {
                 _emergencyTicks = 0;
-                if (sacrificeForeground)
+                if (hardPressure && protectedPids.Contains(urgent.Pid))
                 {
                     _log.Warn(Loc.F(LK.EngineEmergencyForegroundFormat,
                         _settings.DiskNumber, busy, urgent.Name, urgent.Pid) + _diskInfoSuffix);
@@ -818,14 +814,16 @@ public sealed class GuardEngine : IDisposable
                 else
                 {
                     _log.Warn(Loc.F(LK.EngineEmergencyThrottleFormat,
-                        _settings.DiskNumber, busy, _settings.EmergencyPercent, urgent.Name, urgent.Pid) + _diskInfoSuffix);
+                        _settings.DiskNumber, busy,
+                        hardPressure ? DiskBusyHardLimitPercent : _settings.EmergencyPercent,
+                        urgent.Name, urgent.Pid) + _diskInfoSuffix);
                 }
-                Engage(urgent, busy, emergency: true);
+                Engage(urgent, busy, emergency: true, hardLimit: hardPressure);
                 return;
             }
         }
 
-        if (!high) return;
+        if (!high && !hardPressure) return;
 
         var candidate = FindCandidate(rows, protectedPids, ignoreBlocked: false, minRate: minRate);
         if (candidate == null)
@@ -843,14 +841,14 @@ public sealed class GuardEngine : IDisposable
             return;
         }
 
-        Engage(candidate, busy);
+        Engage(candidate, busy, emergency: hardPressure, hardLimit: hardPressure);
     }
 
     /// <summary>
     /// 闭环控制：以"占磁盘忙碌时间百分比"为达标标准，先降优先级，不达标就逐级收紧吞吐上限，
     /// 直到目标占比降到设定值以下（或触及下限）。
     /// </summary>
-    private void ControlTarget(double busy, List<ProcessIoRow> rows, HashSet<int> protectedPids, DateTime now, bool high)
+    private void ControlTarget(double busy, List<ProcessIoRow> rows, HashSet<int> protectedPids, DateTime now, bool high, bool hardPressure)
     {
         var target = _target!;
         double instantOccupancy = 0;
@@ -888,7 +886,8 @@ public sealed class GuardEngine : IDisposable
         }
 
         // 出现"明显更重"的进程（占比达到 2 倍当前目标且超过触发线）时切换目标
-        var heavier = FindCandidate(rows, protectedPids, ignoreBlocked: false,
+        var candidateProtectedPids = hardPressure ? NoProtectedPids : protectedPids;
+        var heavier = FindCandidate(rows, candidateProtectedPids, ignoreBlocked: false,
             minShareOverride: Math.Max(_settings.TriggerOccupancyPercent, share * 2), excludePid: target.Pid);
         if (heavier != null)
         {
@@ -900,8 +899,9 @@ public sealed class GuardEngine : IDisposable
                 _log.Info(Loc.F(LK.EngineHeavierTargetFormat,
                     heavier.Name, heavier.Pid, heavier.AverageOccupancyPercent));
                 // 复用统一入口：还原旧目标、清掉记录与窗口，再对新目标限速
+                bool maintainHardLimit = _hardLimitTarget || hardPressure;
                 ReleaseTarget(Loc.T(LK.EngineReasonSwitchHeavier));
-                Engage(heavier, busy);
+                Engage(heavier, busy, hardLimit: maintainHardLimit);
                 return;
             }
         }
@@ -911,13 +911,13 @@ public sealed class GuardEngine : IDisposable
             _pendingCount = 0;
         }
 
-        if (!high) return;
+        if (!high && !hardPressure) return;
 
         // 用忙率的滑动平均判"够不够用"：避免某一秒瞬时回落就停止收紧
         double busyAvg = WindowAverage(Math.Clamp((int)Math.Round(_settings.TriggerSeconds), 1, 120));
 
         // 够用即可：忙率一旦回落到 95% 以下就不再继续收紧，不必把程序一路压到最低档
-        if (busyAvg < BusyReliefPercent)
+        if (busyAvg < BusyReliefPercent && !hardPressure)
         {
             if (!_capHoldLogged)
             {
@@ -929,7 +929,7 @@ public sealed class GuardEngine : IDisposable
         }
 
         // 已达标：维持在设定目标占用以下，同样不再继续收紧
-        if (share <= _settings.TargetOccupancyPercent)
+        if (share <= _settings.TargetOccupancyPercent && !hardPressure)
         {
             if (!_capHoldLogged)
             {
@@ -945,7 +945,7 @@ public sealed class GuardEngine : IDisposable
 
         // 上次收紧之后忙率没有实质改善（瓶颈不在这个进程，或者磁盘自己在忙）：
         // 再往下压既救不了磁盘，又会让程序越来越卡，保持当前上限即可。
-        if (_busyBeforeLastTighten >= 0 && busyAvg > _busyBeforeLastTighten - BusyImprovementPercent)
+        if (_busyBeforeLastTighten >= 0 && busyAvg > _busyBeforeLastTighten - BusyImprovementPercent && !hardPressure)
         {
             if (!_capIneffectiveLogged)
             {
@@ -958,7 +958,7 @@ public sealed class GuardEngine : IDisposable
 
         if (_targetLevel == 1)
         {
-            if (!_settings.EnableRateCap)
+            if (!_settings.EnableRateCap && !_hardLimitTarget && !hardPressure)
             {
                 if (!_capFloorLogged)
                 {
@@ -1145,7 +1145,7 @@ public sealed class GuardEngine : IDisposable
         return sum / queue.Count;
     }
 
-    private void Engage(ProcessIoRow row, double busy, bool emergency = false)
+    private void Engage(ProcessIoRow row, double busy, bool emergency = false, bool hardLimit = false)
     {
         var handle = _throttler.ApplyLevel1(row.Pid, row.Name, _settings.LowerIoPriority, _settings.IoPriorityLevel, _settings.LowerCpuPriority);
         if (handle == null)
@@ -1157,6 +1157,7 @@ public sealed class GuardEngine : IDisposable
 
         _warnedUnable = false;
         _target = handle;
+        _hardLimitTarget = hardLimit;
         _targetLevel = 1;
         _levelAppliedAt = DateTime.Now;
         _idleTargetTicks = 0;
@@ -1167,7 +1168,6 @@ public sealed class GuardEngine : IDisposable
         _capFloorLogged = false;
         _capIneffectiveLogged = false;
         _busyBeforeLastTighten = -1;
-        _foregroundHoldLogged = false;
         _currentCapBytesPerSec = (long)Math.Max(1, _settings.RateCapMBps) * (long)Mega;
         _currentCapIops = InitialIopsCapFor(row);
         _targetOccupancyHistory.Clear();
@@ -1191,7 +1191,7 @@ public sealed class GuardEngine : IDisposable
             row.AverageOccupancyPercent, ProcessUtil.FormatRate(row.TotalBytesPerSec),
             _settings.TargetOccupancyPercent) + _diskInfoSuffix);
 
-        if (emergency && _settings.EnableRateCap)
+        if (emergency && (_settings.EnableRateCap || hardLimit))
         {
             long cap = (long)Math.Max(1, _settings.RateCapMBps) * (long)Mega;
             if (_throttler.ApplyLevel2(handle, cap, _currentCapIops))
@@ -1234,9 +1234,17 @@ public sealed class GuardEngine : IDisposable
     }
 
     /// <summary>该进程当前的 IO 量是否足以"压住磁盘"（否则限速它没有意义）。</summary>
-    private bool IsRealLoad(ProcessIoRow row) =>
-        row.AverageBytesPerSec >= MinLoadBytesPerSec ||
-        row.AverageIoCount >= Math.Max(Math.Max(1, _settings.MinIops), MinLoadIops);
+    private bool IsRealLoad(ProcessIoRow row)
+    {
+        double minIops = Math.Max(Math.Max(1, _settings.MinIops), MinLoadIops);
+
+        // 历史窗口用于确认它通常是负载源；当前采样再确认它此刻仍在发 IO。
+        // 只看滑动平均会让刚停止工作的进程在 5–10 秒内仍被选中，
+        // 而磁盘响应变慢时服务时间又会把这种“受害者”排到榜首，限速它会连带卡住输入。
+        bool recentLoad = row.AverageBytesPerSec >= MinLoadBytesPerSec || row.AverageIoCount >= minIops;
+        bool currentLoad = row.CurrentBytesPerSec >= MinLoadBytesPerSec || row.CurrentIoCount >= minIops;
+        return recentLoad && currentLoad;
+    }
 
     private string Classify(ProcessIoRow row, HashSet<int> protectedPids)
     {
