@@ -68,6 +68,7 @@
                     </StackPanel>
                     <ProgressBar x:Name="BusyBar" Height="10" Margin="0,6,120,0" Maximum="100" Foreground="#2563EB" Background="#E5E7EB" />
                     <TextBlock x:Name="DetailText" Margin="0,8,0,0" Foreground="#6B7280" Text="--" />
+                    <TextBlock x:Name="SystemDiagnosisText" Margin="0,5,0,0" Foreground="#92400E" Text="--" TextWrapping="Wrap" />
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" VerticalAlignment="Center" MinWidth="290">
@@ -275,6 +276,37 @@
                                     <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelShowBalloon], Source={x:Static loc:LocSource.Instance}}" />
                                     <CheckBox IsChecked="{Binding Settings.ShowBalloon}" />
                                 </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardDeveloper], Source={x:Static loc:LocSource.Instance}}" />
+                                <CheckBox x:Name="DeveloperModeCheck" Content="{Binding [LabelDeveloperMode], Source={x:Static loc:LocSource.Instance}}"
+                                          IsChecked="{Binding Settings.DeveloperMode}" Click="OnDeveloperModeClicked" />
+                                <TextBlock Margin="0,8,0,10" Foreground="#6B7280" TextWrapping="Wrap"
+                                           Text="{Binding [HintDeveloperMode], Source={x:Static loc:LocSource.Instance}}" />
+                                <WrapPanel>
+                                    <Button Content="{Binding [BtnViewDeveloperLog], Source={x:Static loc:LocSource.Instance}}" Click="OnViewDeveloperLogClicked" />
+                                    <Button Content="{Binding [BtnOpenDeveloperLogFolder], Source={x:Static loc:LocSource.Instance}}" Margin="10,0,0,0"
+                                            Click="OnOpenDeveloperLogFolderClicked" />
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardMaintenance], Source={x:Static loc:LocSource.Instance}}" />
+                                <TextBlock Margin="0,0,0,8" Foreground="#6B7280" TextWrapping="Wrap"
+                                           Text="{Binding [HintMaintenance], Source={x:Static loc:LocSource.Instance}}" />
+                                <StackPanel Orientation="Horizontal" Margin="0,3">
+                                    <CheckBox x:Name="StopSysMainCheck" Content="SysMain" Width="120" />
+                                    <CheckBox x:Name="StopWSearchCheck" Content="WSearch" Width="120" />
+                                    <CheckBox x:Name="StopDoSvcCheck" Content="DoSvc" Width="120" />
+                                </StackPanel>
+                                <Button x:Name="StopSelectedServicesButton" HorizontalAlignment="Left" Margin="0,8,0,0"
+                                        Content="{Binding [BtnStopSelectedServices], Source={x:Static loc:LocSource.Instance}}"
+                                        Click="OnStopSelectedServicesClicked" />
                             </StackPanel>
                         </Border>
 

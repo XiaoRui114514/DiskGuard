@@ -15,6 +15,7 @@ public partial class App : System.Windows.Application
     private Mutex? _mutex;
     private AppLogger? _logger;
     private GuardEngine? _engine;
+    private DeveloperRecorder? _developerRecorder;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -73,7 +74,11 @@ public partial class App : System.Windows.Application
         }
 
         var engine = new GuardEngine(settings, logger);
-        var window = new MainWindow(engine, settings, logger);
+        string version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.7.2";
+        var developerRecorder = new DeveloperRecorder(logger, AppPaths.DeveloperLogDirectory, version, settings);
+        _developerRecorder = developerRecorder;
+        engine.SnapshotProduced += developerRecorder.RecordSnapshot;
+        var window = new MainWindow(engine, settings, logger, developerRecorder);
         _engine = engine;
         MainWindow = window;
 
@@ -122,6 +127,7 @@ public partial class App : System.Windows.Application
     protected override void OnExit(ExitEventArgs e)
     {
         try { _engine?.Stop(); } catch { }
+        try { _developerRecorder?.Dispose(); } catch { }
         try { _logger?.Dispose(); } catch { }
         try { _mutex?.ReleaseMutex(); } catch { }
         _mutex?.Dispose();

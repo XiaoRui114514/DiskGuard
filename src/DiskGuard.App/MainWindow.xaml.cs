@@ -24,6 +24,10 @@ public partial class MainWindow : Window
     private readonly GuardEngine _engine;
     private readonly AppSettings _settings;
     private readonly AppLogger _logger;
+    private readonly DeveloperRecorder _developerRecorder;
+    private readonly DispatcherTimer _developerHeartbeat;
+    private long _lastHeartbeatAt = Stopwatch.GetTimestamp();
+    private DeveloperLogWindow? _developerLogWindow;
     private readonly TrayIconService _tray;
     private readonly SettingsVm _settingsVm;
     private readonly Dictionary<int, ProcessRowVm> _rowMap = new();
@@ -39,13 +43,14 @@ public partial class MainWindow : Window
     public ObservableCollection<LogRowVm> Logs { get; } = new();
     public SettingsVm Settings { get; }
 
-    public MainWindow(GuardEngine engine, AppSettings settings, AppLogger logger)
+    public MainWindow(GuardEngine engine, AppSettings settings, AppLogger logger, DeveloperRecorder developerRecorder)
     {
         InitializeComponent();
 
         _engine = engine;
         _settings = settings;
         _logger = logger;
+        _developerRecorder = developerRecorder;
         _settingsVm = SettingsVm.From(settings);
         Settings = _settingsVm;
 
@@ -65,6 +70,18 @@ public partial class MainWindow : Window
         ElevateButton.Visibility = ElevationService.IsElevated ? Visibility.Collapsed : Visibility.Visible;
 
         ApplyLanguage(Loc.Current);
+
+        _developerHeartbeat = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromSeconds(1)
+        };
+        _developerHeartbeat.Tick += (_, _) =>
+        {
+            long now = Stopwatch.GetTimestamp();
+            _developerRecorder.RecordUiHeartbeat(Stopwatch.GetElapsedTime(_lastHeartbeatAt, now).TotalMilliseconds - 1000, IsVisible);
+            _lastHeartbeatAt = now;
+        };
+        _developerHeartbeat.Start();
 
         if (settings.StartMinimized && settings.ShowBalloon)
             _tray.ShowBalloon(Loc.T(LK.BalloonStartedTitle), Loc.T(LK.BalloonStartedBody));
@@ -118,6 +135,7 @@ public partial class MainWindow : Window
 
     private void ApplySnapshot(EngineSnapshot snapshot)
     {
+        long refreshStarted = Stopwatch.GetTimestamp();
         try
         {
             ApplySnapshotCore(snapshot);
@@ -125,6 +143,10 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             _logger.Error(Loc.F(LK.LogUiRefreshFailedFormat, ex.Message));
+        }
+        finally
+        {
+            _developerRecorder.RecordUiRefresh(Stopwatch.GetElapsedTime(refreshStarted).TotalMilliseconds);
         }
     }
 
@@ -138,6 +160,24 @@ public partial class MainWindow : Window
             snapshot.TriggerPercent, snapshot.RecoverPercent,
             snapshot.TriggerOccupancyPercent, snapshot.TargetOccupancyPercent,
             snapshot.LatencyMs >= 0 ? $"{snapshot.LatencyMs:0.#} ms" : "-");
+
+        string systemRate = Loc.Value(ProcessUtil.FormatRate(snapshot.SystemRateBytesPerSec));
+        if (snapshot.StartupAgeSeconds < 900 && snapshot.BusyPercent >= snapshot.TriggerPercent)
+        {
+            SystemDiagnosisText.Text = Loc.F(LK.SystemDiagnosisStartupFormat, snapshot.StartupAgeSeconds / 60.0);
+            SystemDiagnosisText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x92, 0x40, 0x0E));
+        }
+        else if (snapshot.SystemOccupancyPercent >= 5 || snapshot.SystemCpuPercent >= 5)
+        {
+            SystemDiagnosisText.Text = Loc.F(LK.SystemDiagnosisActiveFormat,
+                snapshot.SystemOccupancyPercent, systemRate, snapshot.SystemCpuPercent);
+            SystemDiagnosisText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xB9, 0x1C, 0x1C));
+        }
+        else
+        {
+            SystemDiagnosisText.Text = Loc.T(LK.SystemDiagnosisIdle);
+            SystemDiagnosisText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x6B, 0x72, 0x80));
+        }
 
         StateText.Text = snapshot.StateText;
         StateBadge.Background = snapshot.StateKind switch
@@ -344,6 +384,7 @@ public partial class MainWindow : Window
         _settings.Save(AppPaths.SettingsFile);
         _engine.UpdateSettings(_settings);
         _logger.WriteToFile = _settings.WriteLogFile;
+        _developerRecorder.Configure(_settings);
         _settingsVm.ReloadFrom(_settings);
         _logger.Info(Loc.T(LK.LogSettingsSaved));
         System.Windows.MessageBox.Show(Loc.T(LK.MsgSettingsSaved), Loc.T(LK.AppTitle),
@@ -359,7 +400,74 @@ public partial class MainWindow : Window
         _settings.Save(AppPaths.SettingsFile);
         _engine.UpdateSettings(_settings);
         _logger.WriteToFile = _settings.WriteLogFile;
+        _developerRecorder.Configure(_settings);
         _logger.Info(Loc.T(LK.LogDefaultsRestored));
+    }
+
+    private void OnDeveloperModeClicked(object sender, RoutedEventArgs e)
+    {
+        _settings.DeveloperMode = DeveloperModeCheck.IsChecked == true;
+        _settingsVm.DeveloperMode = _settings.DeveloperMode;
+        _settings.Save(AppPaths.SettingsFile);
+        _developerRecorder.Configure(_settings);
+    }
+
+    private void OnViewDeveloperLogClicked(object sender, RoutedEventArgs e)
+    {
+        if (_developerLogWindow != null)
+        {
+            _developerLogWindow.Activate();
+            return;
+        }
+        _developerLogWindow = new DeveloperLogWindow(_developerRecorder) { Owner = this };
+        _developerLogWindow.Closed += (_, _) => _developerLogWindow = null;
+        _developerLogWindow.Show();
+    }
+
+    private async void OnOpenDeveloperLogFolderClicked(object sender, RoutedEventArgs e)
+    {
+        await _developerRecorder.FlushAsync();
+        try
+        {
+            if (!Directory.Exists(AppPaths.DeveloperLogDirectory)) return;
+            Process.Start(new ProcessStartInfo("explorer.exe", AppPaths.DeveloperLogDirectory) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show(Loc.F(LK.MsgOpenDirFailedFormat, ex.Message), Loc.T(LK.AppTitle),
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private async void OnStopSelectedServicesClicked(object sender, RoutedEventArgs e)
+    {
+        if (!ElevationService.IsElevated)
+        {
+            System.Windows.MessageBox.Show(Loc.T(LK.MsgServicesNeedsAdmin), Loc.T(LK.AppTitle),
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var selected = new List<string>();
+        if (StopSysMainCheck.IsChecked == true) selected.Add("SysMain");
+        if (StopWSearchCheck.IsChecked == true) selected.Add("WSearch");
+        if (StopDoSvcCheck.IsChecked == true) selected.Add("DoSvc");
+        if (selected.Count == 0) return;
+
+        StopSelectedServicesButton.IsEnabled = false;
+        var results = await System.Threading.Tasks.Task.Run(() =>
+            selected.Select(name => (Name: name, Result: ServiceControlService.Stop(name))).ToList());
+        StopSelectedServicesButton.IsEnabled = true;
+
+        var ok = results.Where(x => x.Result.Ok).Select(x => x.Name).ToList();
+        var failed = results.Where(x => !x.Result.Ok).Select(x => x.Result.Message).ToList();
+        if (ok.Count > 0) _logger.Info(Loc.F(LK.MsgServicesStoppedFormat, string.Join(", ", ok)));
+        if (failed.Count > 0)
+        {
+            _logger.Warn(Loc.F(LK.MsgServicesStopFailedFormat, string.Join("\n", failed)));
+            System.Windows.MessageBox.Show(Loc.F(LK.MsgServicesStopFailedFormat, string.Join("\n", failed)),
+                Loc.T(LK.AppTitle), MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     private async void OnAutoStartClicked(object sender, RoutedEventArgs e)
@@ -489,9 +597,12 @@ public partial class MainWindow : Window
 
     private void ShutdownCore()
     {
+        _developerHeartbeat.Stop();
+        _developerLogWindow?.Close();
         try { _engine.ReleaseTarget(Loc.T(LK.ReasonExit)); } catch { }
         try { _engine.Stop(); } catch { }
         try { _tray.Dispose(); } catch { }
+        try { _developerRecorder.Dispose(); } catch { }
         try { _logger.Dispose(); } catch { }   // 把队列里的日志写完
         System.Windows.Application.Current.Shutdown();
     }

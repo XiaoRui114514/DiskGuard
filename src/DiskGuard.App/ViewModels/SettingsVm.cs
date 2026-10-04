@@ -37,6 +37,7 @@ public sealed class SettingsVm : INotifyPropertyChanged
     private bool _startMinimized;
     private bool _autoStart;
     private bool _writeLogFile;
+    private bool _developerMode;
     private bool _showBalloon;
     private string _language = string.Empty;
 
@@ -65,6 +66,7 @@ public sealed class SettingsVm : INotifyPropertyChanged
     public bool StartMinimized { get => _startMinimized; set => Set(ref _startMinimized, value); }
     public bool AutoStart { get => _autoStart; set => Set(ref _autoStart, value); }
     public bool WriteLogFile { get => _writeLogFile; set => Set(ref _writeLogFile, value); }
+    public bool DeveloperMode { get => _developerMode; set => Set(ref _developerMode, value); }
     public bool ShowBalloon { get => _showBalloon; set => Set(ref _showBalloon, value); }
     public string Language { get => _language; set => Set(ref _language, value); }
 
@@ -98,6 +100,7 @@ public sealed class SettingsVm : INotifyPropertyChanged
         StartMinimized = settings.StartMinimized,
         AutoStart = AutoStartChecked(settings),
         WriteLogFile = settings.WriteLogFile,
+        DeveloperMode = settings.DeveloperMode,
         ShowBalloon = settings.ShowBalloon,
         Language = Loc.Code(Loc.FromCode(settings.Language))
     };
@@ -128,6 +131,7 @@ public sealed class SettingsVm : INotifyPropertyChanged
         settings.StartMinimized = StartMinimized;
         settings.AutoStart = AutoStart;
         settings.WriteLogFile = WriteLogFile;
+        settings.DeveloperMode = DeveloperMode;
         settings.ShowBalloon = ShowBalloon;
         settings.Language = Language;
 
@@ -165,6 +169,7 @@ public sealed class SettingsVm : INotifyPropertyChanged
         StartMinimized = copy.StartMinimized;
         AutoStart = copy.AutoStart;
         WriteLogFile = copy.WriteLogFile;
+        DeveloperMode = copy.DeveloperMode;
         ShowBalloon = copy.ShowBalloon;
         Language = copy.Language;
     }

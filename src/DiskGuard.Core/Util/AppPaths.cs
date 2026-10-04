@@ -11,6 +11,8 @@ public static class AppPaths
 
     public static string LogDirectory => Path.Combine(DataDirectory, "logs");
 
+    public static string DeveloperLogDirectory => Path.Combine(DataDirectory, "developer-logs");
+
     public static string ActiveThrottleFile => Path.Combine(DataDirectory, "active-throttles.json");
 }
 

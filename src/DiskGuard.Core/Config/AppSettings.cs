@@ -47,6 +47,7 @@ public sealed class AppSettings
     [JsonPropertyName("startMinimized")] public bool StartMinimized { get; set; } = true;
     [JsonPropertyName("autoStart")] public bool AutoStart { get; set; } = true;
     [JsonPropertyName("writeLogFile")] public bool WriteLogFile { get; set; } = true;
+    [JsonPropertyName("developerMode")] public bool DeveloperMode { get; set; }
     [JsonPropertyName("showBalloon")] public bool ShowBalloon { get; set; } = true;
 
     /// <summary>界面语言代码（zh-Hans / zh-Hant / en / ja / ko / ar）；留空表示跟随系统。</summary>

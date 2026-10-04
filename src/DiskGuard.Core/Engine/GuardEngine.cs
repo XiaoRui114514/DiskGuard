@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using DiskGuard.Core.Config;
+using DiskGuard.Core.Interop;
 using DiskGuard.Core.Localization;
 using DiskGuard.Core.Logging;
 using DiskGuard.Core.Monitoring;
@@ -141,6 +142,12 @@ public sealed class GuardEngine : IDisposable
     private int _noThroughputTicks;
     private DateTime _lastNoThroughputLog = DateTime.MinValue;
     private DateTime _lastDefragHint = DateTime.MinValue;
+    // 用系统 TickCount 估算 Windows 启动时间，而不是把工具晚启动的时间当作开机时间。
+    private readonly DateTime _bootAt = DateTime.Now - TimeSpan.FromMilliseconds(Environment.TickCount64);
+    private long _lastSystemIdleTicks;
+    private long _lastSystemKernelTicks;
+    private long _lastSystemUserTicks;
+    private DateTime _lastSystemCpuAt;
 
     private sealed class PidHistory
     {
@@ -498,6 +505,7 @@ public sealed class GuardEngine : IDisposable
 
     private void Tick(double elapsed)
     {
+        long sampleStarted = Stopwatch.GetTimestamp();
         var sampler = _diskSampler;
         var source = _ioSource;
         if (sampler == null || source == null) return;
@@ -567,6 +575,10 @@ public sealed class GuardEngine : IDisposable
             return byOccupancy != 0 ? byOccupancy : b.TotalBytesPerSec.CompareTo(a.TotalBytesPerSec);
         });
 
+        var systemRow = rows.FirstOrDefault(r => r.Pid == 4);
+        var now = DateTime.Now;
+        double systemCpu = ReadSystemCpuPercent(now);
+
         // 下面这段会读写 _target / 历史窗口等共享状态，而界面线程的"暂停/还原/手动限速"也会改它们，
         // 因此统一放进 _stateSync：两个线程不会同时改限速目标，也不会重复释放同一个句柄。
         double busy = disk?.BusyPercent ?? 0;
@@ -581,13 +593,13 @@ public sealed class GuardEngine : IDisposable
                 : Loc.F(LK.EngineDiskInstanceSuffixFormat, disk.InstanceName,
                     ProcessUtil.FormatRate(disk.ReadBytesPerSec), ProcessUtil.FormatRate(disk.WriteBytesPerSec),
                     disk.LatencyValid ? $"{disk.LatencyMs:0.#} ms" : "?");
-            int foregroundPid = settings.ProtectForeground ? ProcessUtil.GetForegroundProcessId() : 0;
+            int observedForegroundPid = ProcessUtil.GetForegroundProcessId();
+            int foregroundPid = settings.ProtectForeground ? observedForegroundPid : 0;
             // 保护对象是"前台程序的整个进程族"：浏览器/Electron/商店应用往往是多进程，
             // 前台窗口和真正读写磁盘的不是同一个 PID，只保护单个 PID 会限速用户正在用的软件。
             HashSet<int> protectedPids = foregroundPid > 0
                 ? ProcessUtil.GetProcessFamily(foregroundPid)
                 : new HashSet<int>();
-            var now = DateTime.Now;
             int windowLength = WindowLength();
 
             UpdateRateHistory(rows, windowLength);
@@ -646,6 +658,12 @@ public sealed class GuardEngine : IDisposable
                 Disks = sampler.Disks,
                 DiskNumber = settings.DiskNumber,
                 DiskLabel = disk?.DisplayName ?? Loc.F(LK.DiskLabelFormat, settings.DiskNumber),
+                SelectedDiskAvailable = disk != null,
+                SampleIntervalMs = elapsed * 1000,
+                SampleDurationMs = Stopwatch.GetElapsedTime(sampleStarted).TotalMilliseconds,
+                ForegroundPid = observedForegroundPid,
+                IoEventCount = source is EtwProcessIoSource events ? events.EventCount : -1,
+                IoHealthError = source.HealthError,
                 Rows = rows.Count > 25 ? rows.GetRange(0, 25) : rows,
                 ActivePid = _target?.Pid ?? -1,
                 ActiveName = _target?.Name ?? string.Empty,
@@ -664,7 +682,12 @@ public sealed class GuardEngine : IDisposable
                 TriggerPercent = settings.TriggerPercent,
                 RecoverPercent = settings.RecoverPercent,
                 TriggerOccupancyPercent = settings.TriggerOccupancyPercent,
-                TargetOccupancyPercent = settings.TargetOccupancyPercent
+                TargetOccupancyPercent = settings.TargetOccupancyPercent,
+                SystemOccupancyPercent = systemRow?.OccupancyPercent ?? 0,
+                SystemRateBytesPerSec = systemRow?.TotalBytesPerSec ?? 0,
+                SystemIoCount = systemRow?.IoCount ?? 0,
+                SystemCpuPercent = systemCpu,
+                StartupAgeSeconds = Math.Max(0, (now - _bootAt).TotalSeconds)
             };
         }
 
@@ -681,6 +704,44 @@ public sealed class GuardEngine : IDisposable
             _log.Info(Loc.F(LK.EngineDiagnosticFormat, rows.Count, busy, eventCount, etwExtra, source.Mode));
         }
     }
+
+    /// <summary>读取系统内核忙碌时间作为 PID 4 的 CPU 诊断近似值，不打开 PID 4 句柄。</summary>
+    private double ReadSystemCpuPercent(DateTime now)
+    {
+        try
+        {
+            if (!NativeMethods.GetSystemTimes(out var idle, out var kernel, out var user)) return 0;
+            long idleTicks = FileTimeTicks(idle);
+            long kernelTicks = FileTimeTicks(kernel);
+            long userTicks = FileTimeTicks(user);
+            if (_lastSystemCpuAt == default)
+            {
+                _lastSystemIdleTicks = idleTicks;
+                _lastSystemKernelTicks = kernelTicks;
+                _lastSystemUserTicks = userTicks;
+                _lastSystemCpuAt = now;
+                return 0;
+            }
+
+            long idleDelta = Math.Max(0, idleTicks - _lastSystemIdleTicks);
+            long kernelDelta = Math.Max(0, kernelTicks - _lastSystemKernelTicks);
+            long userDelta = Math.Max(0, userTicks - _lastSystemUserTicks);
+            long totalDelta = kernelDelta + userDelta;
+            double percent = totalDelta > 0 ? Math.Max(0, kernelDelta - idleDelta) * 100.0 / totalDelta : 0;
+            _lastSystemIdleTicks = idleTicks;
+            _lastSystemKernelTicks = kernelTicks;
+            _lastSystemUserTicks = userTicks;
+            _lastSystemCpuAt = now;
+            return Math.Clamp(percent, 0, 100);
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    private static long FileTimeTicks(System.Runtime.InteropServices.ComTypes.FILETIME value)
+        => ((long)(uint)value.dwHighDateTime << 32) | (uint)value.dwLowDateTime;
 
     private bool _debugDiagnostics;
     private int _tickCount;

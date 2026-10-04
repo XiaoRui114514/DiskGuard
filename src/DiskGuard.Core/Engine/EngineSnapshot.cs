@@ -58,6 +58,12 @@ public sealed class EngineSnapshot
     public IReadOnlyList<DiskStatus> Disks { get; init; } = Array.Empty<DiskStatus>();
     public int DiskNumber { get; init; }
     public string DiskLabel { get; init; } = string.Empty;
+    public bool SelectedDiskAvailable { get; init; }
+    public double SampleIntervalMs { get; init; }
+    public double SampleDurationMs { get; init; }
+    public int ForegroundPid { get; init; }
+    public long IoEventCount { get; init; } = -1;
+    public string IoHealthError { get; init; } = string.Empty;
 
     public IReadOnlyList<ProcessIoRow> Rows { get; init; } = Array.Empty<ProcessIoRow>();
 
@@ -82,4 +88,11 @@ public sealed class EngineSnapshot
     public double RecoverPercent { get; init; }
     public double TriggerOccupancyPercent { get; init; }
     public double TargetOccupancyPercent { get; init; }
+
+    /// <summary>PID 4（System）当前的磁盘/CPU 活动。PID 4 属于内核路径，不能直接限速。</summary>
+    public double SystemOccupancyPercent { get; init; }
+    public double SystemRateBytesPerSec { get; init; }
+    public double SystemIoCount { get; init; }
+    public double SystemCpuPercent { get; init; }
+    public double StartupAgeSeconds { get; init; }
 }

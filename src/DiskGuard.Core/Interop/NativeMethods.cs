@@ -88,6 +88,12 @@ internal static class NativeMethods
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool GetProcessIoCounters(IntPtr hProcess, out IO_COUNTERS ioCounters);
 
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetSystemTimes(out System.Runtime.InteropServices.ComTypes.FILETIME idleTime,
+        out System.Runtime.InteropServices.ComTypes.FILETIME kernelTime,
+        out System.Runtime.InteropServices.ComTypes.FILETIME userTime);
+
     [DllImport("ntdll.dll")]
     internal static extern int NtSetInformationProcess(IntPtr processHandle, int processInformationClass, ref int processInformation, int processInformationLength);
 
