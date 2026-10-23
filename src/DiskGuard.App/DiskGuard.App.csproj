@@ -9,12 +9,13 @@
     <LangVersion>latest</LangVersion>
     <AssemblyName>DiskGuard</AssemblyName>
     <RootNamespace>DiskGuard.App</RootNamespace>
+    <StartupObject>DiskGuard.App.Program</StartupObject>
     <ApplicationIcon>..\..\assets\DiskGuard.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Product>磁盘守护 DiskGuard</Product>
     <AssemblyTitle>磁盘守护 DiskGuard</AssemblyTitle>
     <Company>DiskGuard</Company>
-    <Version>1.7.2</Version>
+    <Version>1.8.1</Version>
     <InvariantGlobalization>false</InvariantGlobalization>
     <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
   </PropertyGroup>

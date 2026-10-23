@@ -2,7 +2,10 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Threading;
 using DiskGuard.App.Services;
 using DiskGuard.App.Localization;
@@ -30,6 +33,12 @@ public partial class MainWindow : Window
     private DeveloperLogWindow? _developerLogWindow;
     private readonly TrayIconService _tray;
     private readonly SettingsVm _settingsVm;
+    private readonly Dictionary<string, CheckBox> _serviceToggles = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, ServiceProbe> _lastServiceStates = new(StringComparer.OrdinalIgnoreCase);
+    private DefenderStatus? _lastDefenderStatus;
+    private ScheduledTaskStatus _lastScheduledTaskStatus;
+    private bool _systemControlsBusy;
+    private bool _updatingSystemControls;
     private readonly Dictionary<int, ProcessRowVm> _rowMap = new();
     private bool _exiting;
     private bool _applyingSettings;
@@ -55,6 +64,16 @@ public partial class MainWindow : Window
         Settings = _settingsVm;
 
         DataContext = this;
+
+        _serviceToggles["SysMain"] = StopSysMainCheck;
+        _serviceToggles["WSearch"] = StopWSearchCheck;
+        _serviceToggles["DoSvc"] = StopDoSvcCheck;
+        _serviceToggles["wuauserv"] = StopWuauservCheck;
+        _serviceToggles["BITS"] = StopBitsCheck;
+        UpdateSystemControlAvailability();
+
+        // 设置页还没打开也要执行：开机计划任务从托盘启动时同样会应用记住的暂停项。
+        _ = RefreshSystemControlsAsync(applyRememberedPauses: true);
 
         _tray = new TrayIconService(message => _logger.Info(message));
         _tray.ShowWindowRequested += ShowFromTray;
@@ -97,6 +116,8 @@ public partial class MainWindow : Window
         VersionText.Text = Loc.F(LK.VersionShortFormat, _version);
         AboutVersionText.Text = Loc.F(LK.VersionFullFormat, _version);
         PrivilegeText.Text = Loc.T(ElevationService.IsElevated ? LK.PrivilegeAdmin : LK.PrivilegeUser);
+        RefreshSystemControlTexts();
+        RefreshSystemControlTexts();
 
         // 磁盘下拉框的显示名（“磁盘 0 (C: D:)”）是按语言现算的，清空后由下一次快照重建
         DiskCombo.ItemsSource = null;
@@ -283,8 +304,63 @@ public partial class MainWindow : Window
 
     private void AddLog(LogEntry entry)
     {
-        Logs.Insert(0, new LogRowVm { Time = entry.TimeText, Level = entry.LevelText, Message = entry.Message });
+        Logs.Insert(0, new LogRowVm { Time = entry.TimeText, Level = entry.LevelText, Message = SanitizeLogMessage(entry.Message) });
         while (Logs.Count > 300) Logs.RemoveAt(Logs.Count - 1);
+    }
+
+    /// <summary>
+    /// WPF 文本排版遇到超长、含控制字符或损坏的代理项时可能反复抛异常。
+    /// 日志只是用于排查，限制单行长度并清理异常字符，避免打开日志页触发排版风暴。
+    /// </summary>
+    private static string SanitizeLogMessage(string message)
+    {
+        const int maxLength = 1200;
+        if (string.IsNullOrEmpty(message)) return string.Empty;
+
+        var builder = new StringBuilder(Math.Min(message.Length, maxLength));
+        bool previousWasSpace = false;
+        for (int i = 0; i < message.Length && builder.Length < maxLength; i++)
+        {
+            char c = message[i];
+            if (char.IsHighSurrogate(c))
+            {
+                if (i + 1 < message.Length && char.IsLowSurrogate(message[i + 1]))
+                {
+                    builder.Append(c);
+                    builder.Append(message[++i]);
+                }
+                else
+                {
+                    builder.Append('\uFFFD');
+                }
+                previousWasSpace = false;
+                continue;
+            }
+
+            if (char.IsLowSurrogate(c))
+            {
+                builder.Append('\uFFFD');
+                previousWasSpace = false;
+                continue;
+            }
+
+            if (c is '\r' or '\n' or '\t') c = ' ';
+            if (char.IsControl(c) || (char.IsWhiteSpace(c) && c != ' ')) c = ' ';
+            if (c == ' ')
+            {
+                if (previousWasSpace) continue;
+                previousWasSpace = true;
+            }
+            else
+            {
+                previousWasSpace = false;
+            }
+
+            builder.Append(c);
+        }
+
+        if (message.Length > maxLength) builder.Append('…');
+        return builder.ToString().Trim();
     }
 
     /// <summary>语言切换后按新语言重新渲染日志列表（消息本身保持写入时的语言）。</summary>
@@ -396,6 +472,7 @@ public partial class MainWindow : Window
         int disk = _settings.DiskNumber;
         var defaults = new AppSettings { DiskNumber = disk };
         _settingsVm.ReloadFrom(defaults);
+        _settings.PausedServicesOnStartup.Clear();
         _settingsVm.ApplyTo(_settings);
         _settings.Save(AppPaths.SettingsFile);
         _engine.UpdateSettings(_settings);
@@ -439,35 +516,426 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void OnStopSelectedServicesClicked(object sender, RoutedEventArgs e)
+    private async void OnRefreshSystemControlsClicked(object sender, RoutedEventArgs e)
     {
-        if (!ElevationService.IsElevated)
+        await RefreshSystemControlsAsync(applyRememberedPauses: false);
+    }
+
+    private async Task RefreshSystemControlsAsync(bool applyRememberedPauses)
+    {
+        if (_systemControlsBusy) return;
+
+        _systemControlsBusy = true;
+        UpdateSystemControlAvailability();
+        SystemControlsStatusText.Text = Loc.T(LK.StatusRefreshing);
+        DefenderStatusText.Text = Loc.T(LK.StatusRefreshing);
+
+        try
         {
-            System.Windows.MessageBox.Show(Loc.T(LK.MsgServicesNeedsAdmin), Loc.T(LK.AppTitle),
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            var applyFailures = new List<(string Name, string Message)>();
+            if (applyRememberedPauses && ElevationService.IsElevated)
+            {
+                var remembered = _settings.PausedServicesOnStartup
+                    .Where(ServiceControlService.IsPausable)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
+                if (remembered.Length > 0)
+                {
+                    applyFailures = await Task.Run(() => remembered
+                        .Select(name => (Name: name, Result: ServiceControlService.SetRunning(name, false)))
+                        .Where(x => !x.Result.Ok)
+                        .Select(x => (x.Name, x.Result.Message))
+                        .ToList());
+                }
+            }
+
+            var data = await Task.Run(() => (
+                Services: ServiceControlService.QueryAll(),
+                Defender: DefenderService.GetStatus(),
+                DriveTask: ScheduledTaskService.GetStatus()));
+
+            ApplyServiceStates(data.Services);
+            ApplyDefenderStatus(data.Defender);
+            ApplyScheduledTaskStatus(data.DriveTask);
+
+            if (!data.Defender.Available)
+                _logger.Warn("Defender status: " + data.Defender.Error);
+            if (!data.DriveTask.Available)
+                _logger.Warn("ScheduledDefrag status: " + data.DriveTask.Error);
+
+            foreach (var failure in applyFailures)
+                _logger.Warn(Loc.F(LK.MsgServiceToggleFailedFormat, failure.Name, failure.Message));
+        }
+        catch (Exception ex)
+        {
+            string message = Loc.F(LK.StatusRefreshFailedFormat, ex.Message);
+            SystemControlsStatusText.Text = message;
+            DefenderStatusText.Text = message;
+            DefenderStatusText.Foreground = (Brush)FindResource("DangerBrush");
+            _logger.Warn(message);
+        }
+        finally
+        {
+            _systemControlsBusy = false;
+            UpdateSystemControlAvailability();
+        }
+    }
+
+    private void ApplyServiceStates(IReadOnlyDictionary<string, ServiceProbe> states)
+    {
+        _lastServiceStates.Clear();
+        foreach (var pair in states) _lastServiceStates[pair.Key] = pair.Value;
+
+        _updatingSystemControls = true;
+        try
+        {
+            foreach (var pair in _serviceToggles)
+            {
+                pair.Value.IsChecked = states.TryGetValue(pair.Key, out ServiceProbe state) && state.Running;
+            }
+        }
+        finally
+        {
+            _updatingSystemControls = false;
+        }
+
+        RefreshSystemControlTexts();
+    }
+
+    private void ApplyDefenderStatus(DefenderStatus status)
+    {
+        _lastDefenderStatus = status;
+        _updatingSystemControls = true;
+        try
+        {
+            DefenderRealtimeCheck.IsChecked = status.RealtimeEnabled;
+            DefenderLowCpuCheck.IsChecked = status.LowCpuPriority;
+            DefenderIdleScanCheck.IsChecked = status.ScanOnlyIfIdle;
+            DefenderScheduledScanCheck.IsChecked = status.ScheduledScanEnabled;
+
+            int[] limits = { 20, 30, 50, 70, 100 };
+            int bestIndex = 0;
+            int bestDistance = int.MaxValue;
+            for (int i = 0; i < limits.Length; i++)
+            {
+                int distance = Math.Abs(limits[i] - status.CpuLimit);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    bestIndex = i;
+                }
+            }
+            DefenderCpuLimitCombo.SelectedIndex = bestIndex;
+        }
+        finally
+        {
+            _updatingSystemControls = false;
+        }
+
+        RefreshSystemControlTexts();
+    }
+
+    private void ApplyScheduledTaskStatus(ScheduledTaskStatus status)
+    {
+        _lastScheduledTaskStatus = status;
+        _updatingSystemControls = true;
+        try
+        {
+            ScheduledDefragCheck.IsChecked = status.Enabled;
+        }
+        finally
+        {
+            _updatingSystemControls = false;
+        }
+        RefreshSystemControlTexts();
+    }
+
+    private void RefreshSystemControlTexts()
+    {
+        ScheduledDefragCheck.ToolTip = _lastScheduledTaskStatus.Available
+            ? null
+            : Loc.T(LK.MsgScheduledTaskUnavailable) + (string.IsNullOrWhiteSpace(_lastScheduledTaskStatus.Error) ? string.Empty : Environment.NewLine + _lastScheduledTaskStatus.Error);
+        if (_lastServiceStates.Count == 0)
+        {
+            SystemControlsStatusText.Text = "--";
+        }
+        else
+        {
+            int running = _lastServiceStates.Values.Count(x => x.Exists && x.Running);
+            int stopped = _lastServiceStates.Values.Count(x => x.Exists && !x.Running);
+            SystemControlsStatusText.Text = Loc.F(LK.ServiceSummaryFormat, running, stopped);
+            SystemControlsStatusText.Foreground = (Brush)FindResource("MutedBrush");
+        }
+
+        if (_lastDefenderStatus is not { } defender)
+        {
+            DefenderStatusText.Text = "--";
             return;
         }
 
-        var selected = new List<string>();
-        if (StopSysMainCheck.IsChecked == true) selected.Add("SysMain");
-        if (StopWSearchCheck.IsChecked == true) selected.Add("WSearch");
-        if (StopDoSvcCheck.IsChecked == true) selected.Add("DoSvc");
-        if (selected.Count == 0) return;
-
-        StopSelectedServicesButton.IsEnabled = false;
-        var results = await System.Threading.Tasks.Task.Run(() =>
-            selected.Select(name => (Name: name, Result: ServiceControlService.Stop(name))).ToList());
-        StopSelectedServicesButton.IsEnabled = true;
-
-        var ok = results.Where(x => x.Result.Ok).Select(x => x.Name).ToList();
-        var failed = results.Where(x => !x.Result.Ok).Select(x => x.Result.Message).ToList();
-        if (ok.Count > 0) _logger.Info(Loc.F(LK.MsgServicesStoppedFormat, string.Join(", ", ok)));
-        if (failed.Count > 0)
+        if (!defender.Available)
         {
-            _logger.Warn(Loc.F(LK.MsgServicesStopFailedFormat, string.Join("\n", failed)));
-            System.Windows.MessageBox.Show(Loc.F(LK.MsgServicesStopFailedFormat, string.Join("\n", failed)),
-                Loc.T(LK.AppTitle), MessageBoxButton.OK, MessageBoxImage.Warning);
+            DefenderStatusText.Text = Loc.F(LK.DefenderUnavailableFormat, defender.Error);
+            DefenderStatusText.Foreground = (Brush)FindResource("DangerBrush");
+            return;
         }
+
+        DefenderStatusText.Text = Loc.F(
+            LK.DefenderStatusFormat,
+            Loc.T(defender.RealtimeEnabled ? LK.CommonOn : LK.CommonOff),
+            Loc.T(defender.ServiceEnabled ? LK.CommonOn : LK.CommonOff),
+            Loc.T(defender.TamperProtected ? LK.CommonOn : LK.CommonOff));
+        DefenderStatusText.Foreground = (Brush)FindResource(defender.RealtimeEnabled ? "SuccessBrush" : "DangerBrush");
+
+    }
+
+    private void UpdateSystemControlAvailability()
+    {
+        bool ready = !_systemControlsBusy;
+        foreach (var pair in _serviceToggles)
+        {
+            pair.Value.IsEnabled = ready &&
+                                  _lastServiceStates.TryGetValue(pair.Key, out ServiceProbe state) &&
+                                  state.Exists;
+        }
+
+        bool defenderReady = ready && _lastDefenderStatus?.Available == true;
+        DefenderRealtimeCheck.IsEnabled = defenderReady;
+        DefenderLowCpuCheck.IsEnabled = defenderReady;
+        DefenderIdleScanCheck.IsEnabled = defenderReady;
+        DefenderScheduledScanCheck.IsEnabled = defenderReady;
+        DefenderCpuLimitCombo.IsEnabled = defenderReady;
+        DefenderLowImpactButton.IsEnabled = defenderReady;
+        ScheduledDefragCheck.IsEnabled = ready && _lastScheduledTaskStatus.Available;
+        RefreshDefenderButton.IsEnabled = ready;
+        RefreshServicesButton.IsEnabled = ready;
+    }
+
+    private async void OnServiceToggleClicked(object sender, RoutedEventArgs e)
+    {
+        if (_updatingSystemControls || _systemControlsBusy || sender is not CheckBox check || check.Tag is not string serviceName)
+            return;
+
+        if (!ElevationService.IsElevated)
+        {
+            ShowAdminRequired(LK.MsgServicesNeedsAdmin);
+            await RefreshSystemControlsAsync(applyRememberedPauses: false);
+            return;
+        }
+
+        bool wantedRunning = check.IsChecked == true;
+        _systemControlsBusy = true;
+        UpdateSystemControlAvailability();
+        try
+        {
+            var result = await Task.Run(() => ServiceControlService.SetRunning(serviceName, wantedRunning));
+            if (result.Ok)
+            {
+                RememberServicePause(serviceName, paused: !wantedRunning);
+                _logger.Info(Loc.F(LK.LogServiceToggleFormat, serviceName, result.Message));
+            }
+            else
+            {
+                _logger.Warn(Loc.F(LK.MsgServiceToggleFailedFormat, serviceName, result.Message));
+                System.Windows.MessageBox.Show(
+                    Loc.F(LK.MsgServiceToggleFailedFormat, serviceName, result.Message),
+                    Loc.T(LK.AppTitle), MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+        finally
+        {
+            _systemControlsBusy = false;
+        }
+
+        await RefreshSystemControlsAsync(applyRememberedPauses: false);
+    }
+
+    private async void OnScheduledDefragToggleClicked(object sender, RoutedEventArgs e)
+    {
+        if (_updatingSystemControls || _systemControlsBusy) return;
+
+        if (!_lastScheduledTaskStatus.Available)
+        {
+            ShowAdminRequired(LK.MsgScheduledTaskUnavailable);
+            await RefreshSystemControlsAsync(applyRememberedPauses: false);
+            return;
+        }
+
+        if (!ElevationService.IsElevated)
+        {
+            ShowAdminRequired(LK.MsgServicesNeedsAdmin);
+            await RefreshSystemControlsAsync(applyRememberedPauses: false);
+            return;
+        }
+
+        bool enabled = ScheduledDefragCheck.IsChecked == true;
+        _systemControlsBusy = true;
+        UpdateSystemControlAvailability();
+        try
+        {
+            var result = await Task.Run(() => ScheduledTaskService.SetEnabled(enabled));
+            if (result.Ok)
+            {
+                _logger.Info(Loc.F(LK.LogServiceToggleFormat, "ScheduledDefrag", result.Message));
+            }
+            else
+            {
+                _logger.Warn(Loc.F(LK.MsgServiceToggleFailedFormat, "ScheduledDefrag", result.Message));
+                System.Windows.MessageBox.Show(
+                    Loc.F(LK.MsgServiceToggleFailedFormat, "ScheduledDefrag", result.Message),
+                    Loc.T(LK.AppTitle), MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+        finally
+        {
+            _systemControlsBusy = false;
+        }
+
+        await RefreshSystemControlsAsync(applyRememberedPauses: false);
+    }
+
+    private void RememberServicePause(string serviceName, bool paused)
+    {
+        var services = _settings.PausedServicesOnStartup;
+        if (paused)
+        {
+            if (!services.Contains(serviceName, StringComparer.OrdinalIgnoreCase))
+                services.Add(serviceName);
+        }
+        else
+        {
+            services.RemoveAll(x => x.Equals(serviceName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        try
+        {
+            _settings.Save(AppPaths.SettingsFile);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn(ex.Message);
+        }
+    }
+
+    private async void OnDefenderRealtimeClicked(object sender, RoutedEventArgs e)
+    {
+        if (_updatingSystemControls || _systemControlsBusy) return;
+
+        if (!ElevationService.IsElevated)
+        {
+            ShowAdminRequired(LK.MsgDefenderNeedsAdmin);
+            await RefreshSystemControlsAsync(applyRememberedPauses: false);
+            return;
+        }
+
+        bool enabled = DefenderRealtimeCheck.IsChecked == true;
+        if (!enabled)
+        {
+            var answer = System.Windows.MessageBox.Show(
+                Loc.T(LK.MsgDefenderRealtimeConfirm),
+                Loc.T(LK.AppTitle),
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                MessageBoxResult.No);
+
+            if (answer != MessageBoxResult.Yes)
+            {
+                DefenderRealtimeCheck.IsChecked = true;
+                return;
+            }
+        }
+
+        await ExecuteDefenderChangeAsync(
+            () => DefenderService.SetRealtimeProtection(enabled),
+            Loc.F(LK.LogDefenderPreferenceChangedFormat, Loc.T(LK.LabelDefenderRealtime)));
+    }
+
+    private async void OnDefenderLowCpuClicked(object sender, RoutedEventArgs e)
+    {
+        if (_updatingSystemControls || _systemControlsBusy) return;
+        bool enabled = DefenderLowCpuCheck.IsChecked == true;
+        await ExecuteDefenderChangeAsync(
+            () => DefenderService.SetLowCpuPriority(enabled),
+            Loc.F(LK.LogDefenderPreferenceChangedFormat, Loc.T(LK.LabelDefenderLowCpu)));
+    }
+
+    private async void OnDefenderIdleScanClicked(object sender, RoutedEventArgs e)
+    {
+        if (_updatingSystemControls || _systemControlsBusy) return;
+        bool enabled = DefenderIdleScanCheck.IsChecked == true;
+        await ExecuteDefenderChangeAsync(
+            () => DefenderService.SetScanOnlyIfIdle(enabled),
+            Loc.F(LK.LogDefenderPreferenceChangedFormat, Loc.T(LK.LabelDefenderIdleScan)));
+    }
+
+    private async void OnDefenderScheduledScanClicked(object sender, RoutedEventArgs e)
+    {
+        if (_updatingSystemControls || _systemControlsBusy) return;
+        bool enabled = DefenderScheduledScanCheck.IsChecked == true;
+        await ExecuteDefenderChangeAsync(
+            () => DefenderService.SetScheduledScan(enabled),
+            Loc.F(LK.LogDefenderPreferenceChangedFormat, Loc.T(LK.LabelDefenderScheduledScan)));
+    }
+
+    private async void OnDefenderCpuLimitChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_updatingSystemControls || _systemControlsBusy) return;
+        int[] limits = { 20, 30, 50, 70, 100 };
+        int index = DefenderCpuLimitCombo.SelectedIndex;
+        if (index < 0 || index >= limits.Length) return;
+
+        int limit = limits[index];
+        await ExecuteDefenderChangeAsync(
+            () => DefenderService.SetCpuLimit(limit),
+            Loc.F(LK.LogDefenderPreferenceChangedFormat, Loc.T(LK.LabelDefenderCpuLimit)));
+    }
+
+    private async void OnApplyDefenderLowImpactClicked(object sender, RoutedEventArgs e)
+    {
+        await ExecuteDefenderChangeAsync(
+            DefenderService.ApplyLowImpact,
+            Loc.T(LK.LogDefenderPreferencesUpdated));
+    }
+
+    private async Task ExecuteDefenderChangeAsync(Func<DefenderOperationResult> action, string successLogMessage)
+    {
+        if (_systemControlsBusy) return;
+        if (!ElevationService.IsElevated)
+        {
+            ShowAdminRequired(LK.MsgDefenderNeedsAdmin);
+            await RefreshSystemControlsAsync(applyRememberedPauses: false);
+            return;
+        }
+
+        _systemControlsBusy = true;
+        UpdateSystemControlAvailability();
+        try
+        {
+            var result = await Task.Run(action);
+            if (result.Ok)
+            {
+                _logger.Info(successLogMessage);
+            }
+            else
+            {
+                string message = Loc.F(LK.MsgDefenderPreferenceFailedFormat, result.Message);
+                _logger.Warn(message);
+                System.Windows.MessageBox.Show(message, Loc.T(LK.AppTitle), MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+        finally
+        {
+            _systemControlsBusy = false;
+        }
+
+        await RefreshSystemControlsAsync(applyRememberedPauses: false);
+    }
+
+    private static void ShowAdminRequired(LK messageKey)
+    {
+        System.Windows.MessageBox.Show(Loc.T(messageKey), Loc.T(LK.AppTitle),
+            MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     private async void OnAutoStartClicked(object sender, RoutedEventArgs e)
@@ -576,12 +1044,30 @@ public partial class MainWindow : Window
         // 托盘不可用时隐藏窗口会让程序再也打不开，此时直接退出更安全
         if (!_tray.IsAvailable)
         {
+            e.Cancel = true;
             _logger.Warn(Loc.T(LK.LogTrayUnavailableExit));
             ExitApplication();
             return;
         }
 
+        var answer = System.Windows.MessageBox.Show(
+            Loc.T(LK.MsgExitOrMinimize),
+            Loc.T(LK.AppTitle),
+            MessageBoxButton.YesNoCancel,
+            MessageBoxImage.Question,
+            MessageBoxResult.Yes);
+
+        if (answer == MessageBoxResult.Yes)
+        {
+            e.Cancel = true;
+            ExitApplication();
+            return;
+        }
+
+        // 取消：保持窗口；否：最小化到托盘继续监控。
         e.Cancel = true;
+        if (answer == MessageBoxResult.Cancel) return;
+
         Hide();
         if (_settings.ShowBalloon)
             _tray.ShowBalloon(Loc.T(LK.BalloonHiddenTitle), Loc.T(LK.BalloonHiddenBody));

@@ -16,6 +16,7 @@ public partial class App : System.Windows.Application
     private AppLogger? _logger;
     private GuardEngine? _engine;
     private DeveloperRecorder? _developerRecorder;
+    private int _handlingUnhandledException;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -29,8 +30,11 @@ public partial class App : System.Windows.Application
         _mutex = new Mutex(true, @"Local\DiskGuard_SingleInstance", out bool createdNew);
         if (!createdNew)
         {
-            System.Windows.MessageBox.Show(Loc.T(LK.MsgSingleInstance), Loc.T(LK.AppTitle),
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            if (!TrayIconService.TryShowExistingInstance())
+            {
+                System.Windows.MessageBox.Show(Loc.T(LK.MsgSingleInstance), Loc.T(LK.AppTitle),
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            }
             Shutdown();
             return;
         }
@@ -39,8 +43,23 @@ public partial class App : System.Windows.Application
 
         DispatcherUnhandledException += (_, args) =>
         {
-            System.Windows.MessageBox.Show(Loc.F(LK.MsgUnhandledFormat, args.Exception.Message), Loc.T(LK.AppTitle),
-                MessageBoxButton.OK, MessageBoxImage.Error);
+            try { _logger?.Error("DispatcherUnhandledException: " + args.Exception); } catch { }
+
+            // UI 线程重复抛异常时不能连续弹 MessageBox，否则 MessageBox 自身触发的新异常
+            // 会让异常处理递归直至栈溢出。只显示一次，其余异常记录后继续运行。
+            if (Interlocked.CompareExchange(ref _handlingUnhandledException, 1, 0) == 0)
+            {
+                try
+                {
+                    System.Windows.MessageBox.Show(Loc.F(LK.MsgUnhandledFormat, args.Exception.Message), Loc.T(LK.AppTitle),
+                        MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref _handlingUnhandledException, 0);
+                }
+            }
+
             args.Handled = true;
         };
 
@@ -74,7 +93,7 @@ public partial class App : System.Windows.Application
         }
 
         var engine = new GuardEngine(settings, logger);
-        string version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.7.2";
+        string version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.8.1";
         var developerRecorder = new DeveloperRecorder(logger, AppPaths.DeveloperLogDirectory, version, settings);
         _developerRecorder = developerRecorder;
         engine.SnapshotProduced += developerRecorder.RecordSnapshot;

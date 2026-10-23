@@ -13,6 +13,9 @@ public static class AppPaths
 
     public static string DeveloperLogDirectory => Path.Combine(DataDirectory, "developer-logs");
 
+    /// <summary>WPF 与临时诊断文件使用应用私有目录，避免系统 TEMP 中的 WPF 残留权限问题。</summary>
+    public static string TempDirectory => Path.Combine(DataDirectory, "temp");
+
     public static string ActiveThrottleFile => Path.Combine(DataDirectory, "active-throttles.json");
 }
 

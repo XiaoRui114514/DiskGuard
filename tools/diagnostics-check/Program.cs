@@ -12,7 +12,7 @@ try
     var settings = new AppSettings { DeveloperMode = false, WriteLogFile = false };
     using var logger = new AppLogger { WriteToFile = false };
     string folder = Path.Combine(root, "records");
-    using (var recorder = new DeveloperRecorder(logger, folder, "1.7.2", settings, time))
+    using (var recorder = new DeveloperRecorder(logger, folder, "1.8.0", settings, time))
     {
         var disks = new[]
         {
@@ -89,7 +89,7 @@ try
         // 写入错误不得卡住监控或丢失内存数据，目录恢复后应能重试。
         string blocked = Path.Combine(root, "blocked");
         File.WriteAllText(blocked, "not a directory");
-        using var failing = new DeveloperRecorder(logger, blocked, "1.7.2", settings, time);
+        using var failing = new DeveloperRecorder(logger, blocked, "1.8.0", settings, time);
         failing.RecordSnapshot(Sample(disks));
         await failing.FlushAsync();
         Check(failing.LastError != null && failing.GetRecent().Any(r => r.Kind == "sample"), "write failure remains visible with memory data");
@@ -100,14 +100,14 @@ try
 
     // 下次启动（包括默认关闭时）清理上次会话留下的过期数据。
     settings.DeveloperMode = true;
-    using (var beforeRestart = new DeveloperRecorder(logger, folder, "1.7.2", settings, time))
+    using (var beforeRestart = new DeveloperRecorder(logger, folder, "1.8.0", settings, time))
     {
         beforeRestart.RecordSnapshot(Sample(new[] { new DiskStatus { DiskNumber = 0, BusyPercent = 80 } }));
         await beforeRestart.FlushAsync();
     }
     time.Advance(TimeSpan.FromMinutes(11));
     settings.DeveloperMode = false;
-    using (var restarted = new DeveloperRecorder(logger, folder, "1.7.2", settings, time))
+    using (var restarted = new DeveloperRecorder(logger, folder, "1.8.0", settings, time))
     {
         await restarted.FlushAsync();
         Check(ReadRecords(folder).Count == 0, "restart cleans expired previous-session files while disabled");

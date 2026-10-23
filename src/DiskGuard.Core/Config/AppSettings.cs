@@ -44,6 +44,9 @@ public sealed class AppSettings
     [JsonPropertyName("protectForeground")] public bool ProtectForeground { get; set; } = true;
     [JsonPropertyName("whitelist")] public List<string> Whitelist { get; set; } = new() { "TextInputHost.exe", "ctfmon.exe" };
 
+    /// <summary>用户在设置页主动关闭过的后台服务。DiskGuard 以管理员启动时会再次暂停这些服务。</summary>
+    [JsonPropertyName("pausedServicesOnStartup")] public List<string> PausedServicesOnStartup { get; set; } = new();
+
     [JsonPropertyName("startMinimized")] public bool StartMinimized { get; set; } = true;
     [JsonPropertyName("autoStart")] public bool AutoStart { get; set; } = true;
     [JsonPropertyName("writeLogFile")] public bool WriteLogFile { get; set; } = true;
@@ -69,6 +72,7 @@ public sealed class AppSettings
                 if (loaded != null)
                 {
                     loaded.Whitelist ??= new List<string>();
+                    loaded.PausedServicesOnStartup ??= new List<string>();
                     return loaded;
                 }
             }

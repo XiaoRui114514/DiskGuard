@@ -7,6 +7,10 @@
         WindowStartupLocation="CenterScreen" Closing="OnWindowClosing">
 
     <Window.Resources>
+        <SolidColorBrush x:Key="DangerBrush" Color="#B91C1C" />
+        <SolidColorBrush x:Key="SuccessBrush" Color="#047857" />
+        <SolidColorBrush x:Key="MutedBrush" Color="#6B7280" />
+
         <Style x:Key="Card" TargetType="Border">
             <Setter Property="Background" Value="White" />
             <Setter Property="BorderBrush" Value="#E3E7EF" />
@@ -19,7 +23,12 @@
             <Setter Property="FontSize" Value="14" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Foreground" Value="#111827" />
+            <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Margin" Value="0,0,0,10" />
+        </Style>
+        <Style x:Key="HintText" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#6B7280" />
+            <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
         <Style x:Key="FieldLabel" TargetType="TextBlock">
             <Setter Property="Width" Value="190" />
@@ -27,18 +36,164 @@
             <Setter Property="Foreground" Value="#374151" />
             <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
-        <Style TargetType="Button">
-            <Setter Property="Padding" Value="12,5" />
-            <Setter Property="Background" Value="#F9FAFB" />
-            <Setter Property="BorderBrush" Value="#D1D5DB" />
+
+        <Style x:Key="ActionButton" TargetType="Button">
+            <Setter Property="Padding" Value="13,6" />
+            <Setter Property="Background" Value="#F8FAFC" />
+            <Setter Property="BorderBrush" Value="#D7DCE5" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="#253047" />
             <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.88" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.72" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
-        <Style TargetType="TextBox">
-            <Setter Property="Padding" Value="4,3" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Style TargetType="Button" BasedOn="{StaticResource ActionButton}" />
+        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource ActionButton}">
+            <Setter Property="Background" Value="#2563EB" />
+            <Setter Property="BorderBrush" Value="#1D4ED8" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
-        <Style TargetType="CheckBox">
+        <Style x:Key="CompactButton" TargetType="Button" BasedOn="{StaticResource ActionButton}">
+            <Setter Property="Padding" Value="9,3" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+
+        <Style x:Key="ToggleSwitch" TargetType="CheckBox">
+            <Setter Property="Width" Value="46" />
+            <Setter Property="Height" Value="26" />
+            <Setter Property="Cursor" Value="Hand" />
             <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid Width="46" Height="26">
+                            <Border x:Name="Track" CornerRadius="13" Background="#D6DBE4" />
+                            <Border x:Name="FocusRing" Margin="-2" CornerRadius="15" BorderBrush="#93C5FD" BorderThickness="2" Opacity="0" />
+                            <Ellipse x:Name="Thumb" Width="20" Height="20" Fill="White" HorizontalAlignment="Left" Margin="3,0,0,0">
+                                <Ellipse.RenderTransform>
+                                    <TranslateTransform x:Name="ThumbTransform" X="0" />
+                                </Ellipse.RenderTransform>
+                            </Ellipse>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Track" Property="Background" Value="#2563EB" />
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="ThumbTransform" Storyboard.TargetProperty="X"
+                                                             To="20" Duration="0:0:0.16" />
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="ThumbTransform" Storyboard.TargetProperty="X"
+                                                             To="0" Duration="0:0:0.16" />
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ToggleRow" TargetType="CheckBox">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Margin" Value="0,1" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Border x:Name="Row" CornerRadius="7" Padding="8,7" Background="Transparent">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter Grid.Column="0" VerticalAlignment="Center" ContentSource="Content" RecognizesAccessKey="True" />
+                                <Grid Grid.Column="1" Width="46" Height="26" Margin="16,0,0,0" VerticalAlignment="Center">
+                                    <Border x:Name="Track" CornerRadius="13" Background="#D6DBE4" />
+                                    <Border x:Name="FocusRing" Margin="-2" CornerRadius="15" BorderBrush="#93C5FD" BorderThickness="2" Opacity="0" />
+                                    <Ellipse x:Name="Thumb" Width="20" Height="20" Fill="White" HorizontalAlignment="Left" Margin="3,0,0,0">
+                                        <Ellipse.RenderTransform>
+                                            <TranslateTransform x:Name="ThumbTransform" X="0" />
+                                        </Ellipse.RenderTransform>
+                                    </Ellipse>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Row" Property="Background" Value="#F8FAFC" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Track" Property="Background" Value="#2563EB" />
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="ThumbTransform" Storyboard.TargetProperty="X"
+                                                             To="20" Duration="0:0:0.16" />
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="ThumbTransform" Storyboard.TargetProperty="X"
+                                                             To="0" Duration="0:0:0.16" />
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="Padding" Value="5,3" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="BorderBrush" Value="#D7DCE5" />
         </Style>
     </Window.Resources>
 
@@ -152,7 +307,7 @@
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardTrigger], Source={x:Static loc:LocSource.Instance}}" />
-                                <TextBlock Margin="0,0,0,8" Foreground="#6B7280" TextWrapping="Wrap"
+                                <TextBlock Style="{StaticResource HintText}" Margin="0,0,0,8"
                                            Text="{Binding [HintTrigger], Source={x:Static loc:LocSource.Instance}}" />
                                 <StackPanel Orientation="Horizontal" Margin="0,4">
                                     <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelTriggerPercent], Source={x:Static loc:LocSource.Instance}}" />
@@ -188,53 +343,80 @@
                                     <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#9CA3AF"
                                                Text="{Binding [HintMinIops], Source={x:Static loc:LocSource.Instance}}" TextWrapping="Wrap" MaxWidth="520" />
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,10,0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelEmergency], Source={x:Static loc:LocSource.Instance}}" />
-                                    <CheckBox IsChecked="{Binding Settings.EnableEmergencyThrottle}" />
-                                    <TextBox Width="70" Margin="10,0,0,0" Text="{Binding Settings.EmergencyPercent, UpdateSourceTrigger=PropertyChanged}" />
-                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#9CA3AF"
-                                               Text="{Binding [HintEmergency], Source={x:Static loc:LocSource.Instance}}" TextWrapping="Wrap" MaxWidth="440" />
-                                </StackPanel>
+
+                                <Grid Margin="0,10,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Foreground="#374151" Text="{Binding [LabelEmergency], Source={x:Static loc:LocSource.Instance}}" />
+                                        <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                                            <TextBox Width="70" Text="{Binding Settings.EmergencyPercent, UpdateSourceTrigger=PropertyChanged}" />
+                                            <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#9CA3AF"
+                                                       Text="{Binding [HintEmergency], Source={x:Static loc:LocSource.Instance}}" TextWrapping="Wrap" MaxWidth="500" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                              IsChecked="{Binding Settings.EnableEmergencyThrottle}" />
+                                </Grid>
                             </StackPanel>
                         </Border>
 
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardThrottle], Source={x:Static loc:LocSource.Instance}}" />
-                                <StackPanel Orientation="Horizontal" Margin="0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelLowerIoPriority], Source={x:Static loc:LocSource.Instance}}" />
-                                    <CheckBox IsChecked="{Binding Settings.LowerIoPriority}" />
-                                    <TextBlock Margin="18,0,0,0" VerticalAlignment="Center" Text="{Binding [LabelLevel], Source={x:Static loc:LocSource.Instance}}" />
-                                    <ComboBox Width="150" SelectedIndex="{Binding Settings.IoPriorityLevel}">
+                                <CheckBox Style="{StaticResource ToggleRow}" IsChecked="{Binding Settings.LowerIoPriority}"
+                                          Content="{Binding [LabelLowerIoPriority], Source={x:Static loc:LocSource.Instance}}" />
+                                <StackPanel Orientation="Horizontal" Margin="8,0,0,5">
+                                    <TextBlock VerticalAlignment="Center" Foreground="#6B7280" Text="{Binding [LabelLevel], Source={x:Static loc:LocSource.Instance}}" />
+                                    <ComboBox Width="150" Margin="10,0,0,0" SelectedIndex="{Binding Settings.IoPriorityLevel}">
                                         <ComboBoxItem Content="{Binding [OptionVeryLow], Source={x:Static loc:LocSource.Instance}}" />
                                         <ComboBoxItem Content="{Binding [OptionLow], Source={x:Static loc:LocSource.Instance}}" />
                                     </ComboBox>
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelLowerCpuPriority], Source={x:Static loc:LocSource.Instance}}" />
-                                    <CheckBox IsChecked="{Binding Settings.LowerCpuPriority}" />
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,10,0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelEnableRateCap], Source={x:Static loc:LocSource.Instance}}" />
-                                    <CheckBox IsChecked="{Binding Settings.EnableRateCap}" />
-                                    <TextBlock Margin="18,0,0,0" VerticalAlignment="Center" Text="{Binding [LabelCapValue], Source={x:Static loc:LocSource.Instance}}" />
-                                    <TextBox Width="90" Text="{Binding Settings.RateCapMBps, UpdateSourceTrigger=PropertyChanged}" />
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,4">
+                                <CheckBox Style="{StaticResource ToggleRow}" IsChecked="{Binding Settings.LowerCpuPriority}"
+                                          Content="{Binding [LabelLowerCpuPriority], Source={x:Static loc:LocSource.Instance}}" />
+
+                                <Grid Margin="8,8,8,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Foreground="#374151" Text="{Binding [LabelEnableRateCap], Source={x:Static loc:LocSource.Instance}}" />
+                                        <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                                            <TextBlock VerticalAlignment="Center" Foreground="#6B7280" Text="{Binding [LabelCapValue], Source={x:Static loc:LocSource.Instance}}" />
+                                            <TextBox Width="90" Margin="10,0,0,0" Text="{Binding Settings.RateCapMBps, UpdateSourceTrigger=PropertyChanged}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitch}" IsChecked="{Binding Settings.EnableRateCap}" />
+                                </Grid>
+
+                                <StackPanel Orientation="Horizontal" Margin="8,8,0,4">
                                     <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelEscalate], Source={x:Static loc:LocSource.Instance}}" />
                                     <TextBox Width="90" Text="{Binding Settings.EscalateSeconds, UpdateSourceTrigger=PropertyChanged}" />
                                     <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#9CA3AF"
                                                Text="{Binding [HintEscalate], Source={x:Static loc:LocSource.Instance}}" TextWrapping="Wrap" MaxWidth="520" />
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,10,0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelSuspendMode], Source={x:Static loc:LocSource.Instance}}" />
-                                    <CheckBox IsChecked="{Binding Settings.EnableSuspendMode}" />
-                                    <TextBlock Margin="18,0,0,0" VerticalAlignment="Center" Text="{Binding [LabelSuspendRun], Source={x:Static loc:LocSource.Instance}}" />
-                                    <TextBox Width="70" Text="{Binding Settings.SuspendRunMs, UpdateSourceTrigger=PropertyChanged}" />
-                                    <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" Text="{Binding [LabelSuspendPause], Source={x:Static loc:LocSource.Instance}}" />
-                                    <TextBox Width="70" Text="{Binding Settings.SuspendPauseMs, UpdateSourceTrigger=PropertyChanged}" />
-                                </StackPanel>
-                                <TextBlock Margin="190,2,0,0" Foreground="#B45309" TextWrapping="Wrap"
+
+                                <Grid Margin="8,8,8,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Foreground="#374151" Text="{Binding [LabelSuspendMode], Source={x:Static loc:LocSource.Instance}}" />
+                                        <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                                            <TextBlock VerticalAlignment="Center" Foreground="#6B7280" Text="{Binding [LabelSuspendRun], Source={x:Static loc:LocSource.Instance}}" />
+                                            <TextBox Width="70" Margin="8,0,0,0" Text="{Binding Settings.SuspendRunMs, UpdateSourceTrigger=PropertyChanged}" />
+                                            <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" Foreground="#6B7280" Text="{Binding [LabelSuspendPause], Source={x:Static loc:LocSource.Instance}}" />
+                                            <TextBox Width="70" Margin="8,0,0,0" Text="{Binding Settings.SuspendPauseMs, UpdateSourceTrigger=PropertyChanged}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitch}" IsChecked="{Binding Settings.EnableSuspendMode}" />
+                                </Grid>
+                                <TextBlock Margin="8,2,0,0" Foreground="#B45309" TextWrapping="Wrap"
                                            Text="{Binding [HintSuspendWarning], Source={x:Static loc:LocSource.Instance}}" />
                             </StackPanel>
                         </Border>
@@ -242,13 +424,11 @@
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardProtection], Source={x:Static loc:LocSource.Instance}}" />
-                                <StackPanel Orientation="Horizontal" Margin="0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelProtectForeground], Source={x:Static loc:LocSource.Instance}}" />
-                                    <CheckBox IsChecked="{Binding Settings.ProtectForeground}" />
-                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#9CA3AF"
-                                               Text="{Binding [HintProtectForeground], Source={x:Static loc:LocSource.Instance}}" TextWrapping="Wrap" MaxWidth="520" />
-                                </StackPanel>
-                                <TextBlock Margin="0,10,0,4" Foreground="#374151" TextWrapping="Wrap"
+                                <CheckBox Style="{StaticResource ToggleRow}" IsChecked="{Binding Settings.ProtectForeground}"
+                                          Content="{Binding [LabelProtectForeground], Source={x:Static loc:LocSource.Instance}}" />
+                                <TextBlock Margin="8,4,0,2" Foreground="#9CA3AF" TextWrapping="Wrap"
+                                           Text="{Binding [HintProtectForeground], Source={x:Static loc:LocSource.Instance}}" />
+                                <TextBlock Margin="8,10,0,4" Foreground="#374151" TextWrapping="Wrap"
                                            Text="{Binding [LabelWhitelist], Source={x:Static loc:LocSource.Instance}}" />
                                 <TextBox Height="110" AcceptsReturn="True" VerticalScrollBarVisibility="Auto"
                                          Text="{Binding Settings.WhitelistText, UpdateSourceTrigger=PropertyChanged}" />
@@ -258,33 +438,27 @@
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardBehavior], Source={x:Static loc:LocSource.Instance}}" />
-                                <StackPanel Orientation="Horizontal" Margin="0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelAutoStart], Source={x:Static loc:LocSource.Instance}}" />
-                                    <CheckBox x:Name="AutoStartCheck" IsChecked="{Binding Settings.AutoStart}" Click="OnAutoStartClicked" />
-                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#9CA3AF"
-                                               Text="{Binding [HintAutoStart], Source={x:Static loc:LocSource.Instance}}" TextWrapping="Wrap" MaxWidth="520" />
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelStartMinimized], Source={x:Static loc:LocSource.Instance}}" />
-                                    <CheckBox IsChecked="{Binding Settings.StartMinimized}" />
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelWriteLog], Source={x:Static loc:LocSource.Instance}}" />
-                                    <CheckBox IsChecked="{Binding Settings.WriteLogFile}" />
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="{Binding [LabelShowBalloon], Source={x:Static loc:LocSource.Instance}}" />
-                                    <CheckBox IsChecked="{Binding Settings.ShowBalloon}" />
-                                </StackPanel>
+                                <CheckBox x:Name="AutoStartCheck" Style="{StaticResource ToggleRow}"
+                                          IsChecked="{Binding Settings.AutoStart}" Click="OnAutoStartClicked"
+                                          Content="{Binding [LabelAutoStart], Source={x:Static loc:LocSource.Instance}}" />
+                                <TextBlock Margin="8,0,0,4" Foreground="#9CA3AF" TextWrapping="Wrap"
+                                           Text="{Binding [HintAutoStart], Source={x:Static loc:LocSource.Instance}}" />
+                                <CheckBox Style="{StaticResource ToggleRow}" IsChecked="{Binding Settings.StartMinimized}"
+                                          Content="{Binding [LabelStartMinimized], Source={x:Static loc:LocSource.Instance}}" />
+                                <CheckBox Style="{StaticResource ToggleRow}" IsChecked="{Binding Settings.WriteLogFile}"
+                                          Content="{Binding [LabelWriteLog], Source={x:Static loc:LocSource.Instance}}" />
+                                <CheckBox Style="{StaticResource ToggleRow}" IsChecked="{Binding Settings.ShowBalloon}"
+                                          Content="{Binding [LabelShowBalloon], Source={x:Static loc:LocSource.Instance}}" />
                             </StackPanel>
                         </Border>
 
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardDeveloper], Source={x:Static loc:LocSource.Instance}}" />
-                                <CheckBox x:Name="DeveloperModeCheck" Content="{Binding [LabelDeveloperMode], Source={x:Static loc:LocSource.Instance}}"
-                                          IsChecked="{Binding Settings.DeveloperMode}" Click="OnDeveloperModeClicked" />
-                                <TextBlock Margin="0,8,0,10" Foreground="#6B7280" TextWrapping="Wrap"
+                                <CheckBox x:Name="DeveloperModeCheck" Style="{StaticResource ToggleRow}"
+                                          IsChecked="{Binding Settings.DeveloperMode}" Click="OnDeveloperModeClicked"
+                                          Content="{Binding [LabelDeveloperMode], Source={x:Static loc:LocSource.Instance}}" />
+                                <TextBlock Margin="8,6,0,10" Foreground="#6B7280" TextWrapping="Wrap"
                                            Text="{Binding [HintDeveloperMode], Source={x:Static loc:LocSource.Instance}}" />
                                 <WrapPanel>
                                     <Button Content="{Binding [BtnViewDeveloperLog], Source={x:Static loc:LocSource.Instance}}" Click="OnViewDeveloperLogClicked" />
@@ -296,23 +470,100 @@
 
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardMaintenance], Source={x:Static loc:LocSource.Instance}}" />
-                                <TextBlock Margin="0,0,0,8" Foreground="#6B7280" TextWrapping="Wrap"
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardDefender], Source={x:Static loc:LocSource.Instance}}" />
+                                    <Button x:Name="RefreshDefenderButton" Grid.Column="1" Style="{StaticResource CompactButton}"
+                                            Content="{Binding [BtnRefreshStatus], Source={x:Static loc:LocSource.Instance}}"
+                                            Click="OnRefreshSystemControlsClicked" />
+                                </Grid>
+                                <TextBlock x:Name="DefenderStatusText" Margin="0,0,0,4" Foreground="#6B7280" Text="--" TextWrapping="Wrap" />
+                                <TextBlock Style="{StaticResource HintText}" Margin="0,0,0,8"
+                                           Text="{Binding [HintDefender], Source={x:Static loc:LocSource.Instance}}" />
+
+                                <CheckBox x:Name="DefenderRealtimeCheck" Style="{StaticResource ToggleRow}"
+                                          Click="OnDefenderRealtimeClicked"
+                                          Content="{Binding [LabelDefenderRealtime], Source={x:Static loc:LocSource.Instance}}" />
+                                <CheckBox x:Name="DefenderLowCpuCheck" Style="{StaticResource ToggleRow}"
+                                          Click="OnDefenderLowCpuClicked"
+                                          Content="{Binding [LabelDefenderLowCpu], Source={x:Static loc:LocSource.Instance}}" />
+                                <CheckBox x:Name="DefenderIdleScanCheck" Style="{StaticResource ToggleRow}"
+                                          Click="OnDefenderIdleScanClicked"
+                                          Content="{Binding [LabelDefenderIdleScan], Source={x:Static loc:LocSource.Instance}}" />
+                                <CheckBox x:Name="DefenderScheduledScanCheck" Style="{StaticResource ToggleRow}"
+                                          Click="OnDefenderScheduledScanClicked"
+                                          Content="{Binding [LabelDefenderScheduledScan], Source={x:Static loc:LocSource.Instance}}" />
+
+                                <Grid Margin="8,7,8,3">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock VerticalAlignment="Center" Foreground="#374151"
+                                               Text="{Binding [LabelDefenderCpuLimit], Source={x:Static loc:LocSource.Instance}}" />
+                                    <ComboBox x:Name="DefenderCpuLimitCombo" Grid.Column="1" Width="96"
+                                              SelectionChanged="OnDefenderCpuLimitChanged">
+                                        <ComboBoxItem Content="20%" />
+                                        <ComboBoxItem Content="30%" />
+                                        <ComboBoxItem Content="50%" />
+                                        <ComboBoxItem Content="70%" />
+                                        <ComboBoxItem Content="100%" />
+                                    </ComboBox>
+                                </Grid>
+                                <Button x:Name="DefenderLowImpactButton" HorizontalAlignment="Left" Margin="8,8,0,2"
+                                        Content="{Binding [BtnDefenderLowImpact], Source={x:Static loc:LocSource.Instance}}"
+                                        Click="OnApplyDefenderLowImpactClicked" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardMaintenance], Source={x:Static loc:LocSource.Instance}}" />
+                                    <Button x:Name="RefreshServicesButton" Grid.Column="1" Style="{StaticResource CompactButton}"
+                                            Content="{Binding [BtnRefreshStatus], Source={x:Static loc:LocSource.Instance}}"
+                                            Click="OnRefreshSystemControlsClicked" />
+                                </Grid>
+                                <TextBlock x:Name="SystemControlsStatusText" Margin="0,0,0,4" Foreground="#6B7280" Text="--" TextWrapping="Wrap" />
+                                <TextBlock Style="{StaticResource HintText}" Margin="0,0,0,7"
                                            Text="{Binding [HintMaintenance], Source={x:Static loc:LocSource.Instance}}" />
-                                <StackPanel Orientation="Horizontal" Margin="0,3">
-                                    <CheckBox x:Name="StopSysMainCheck" Content="SysMain" Width="120" />
-                                    <CheckBox x:Name="StopWSearchCheck" Content="WSearch" Width="120" />
-                                    <CheckBox x:Name="StopDoSvcCheck" Content="DoSvc" Width="120" />
-                                </StackPanel>
-                                <Button x:Name="StopSelectedServicesButton" HorizontalAlignment="Left" Margin="0,8,0,0"
-                                        Content="{Binding [BtnStopSelectedServices], Source={x:Static loc:LocSource.Instance}}"
-                                        Click="OnStopSelectedServicesClicked" />
+
+                                <CheckBox x:Name="StopSysMainCheck" Tag="SysMain" Style="{StaticResource ToggleRow}"
+                                          Click="OnServiceToggleClicked"
+                                          Content="{Binding [LabelSysMain], Source={x:Static loc:LocSource.Instance}}" />
+                                <CheckBox x:Name="StopWSearchCheck" Tag="WSearch" Style="{StaticResource ToggleRow}"
+                                          Click="OnServiceToggleClicked"
+                                          Content="{Binding [LabelSearchIndex], Source={x:Static loc:LocSource.Instance}}" />
+                                <CheckBox x:Name="StopDoSvcCheck" Tag="DoSvc" Style="{StaticResource ToggleRow}"
+                                          Click="OnServiceToggleClicked"
+                                          Content="{Binding [LabelDeliveryOptimization], Source={x:Static loc:LocSource.Instance}}" />
+                                <CheckBox x:Name="StopWuauservCheck" Tag="wuauserv" Style="{StaticResource ToggleRow}"
+                                          Click="OnServiceToggleClicked"
+                                          Content="{Binding [LabelWindowsUpdate], Source={x:Static loc:LocSource.Instance}}" />
+                                <CheckBox x:Name="StopBitsCheck" Tag="BITS" Style="{StaticResource ToggleRow}"
+                                          Click="OnServiceToggleClicked"
+                                          Content="{Binding [LabelBits], Source={x:Static loc:LocSource.Instance}}" />
+                                <CheckBox x:Name="ScheduledDefragCheck" Style="{StaticResource ToggleRow}" Margin="0,6,0,1"
+                                          Click="OnScheduledDefragToggleClicked"
+                                          Content="{Binding [LabelScheduledDefrag], Source={x:Static loc:LocSource.Instance}}" />
+                                <TextBlock Margin="8,4,0,0" Foreground="#9CA3AF" TextWrapping="Wrap"
+                                           Text="{Binding [HintServiceToggles], Source={x:Static loc:LocSource.Instance}}" />
                             </StackPanel>
                         </Border>
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
-                            <Button Content="{Binding [BtnSaveSettings], Source={x:Static loc:LocSource.Instance}}" Padding="20,6" Click="OnSaveSettingsClicked" Background="#2563EB" Foreground="White" BorderBrush="#1D4ED8" />
-                            <Button Content="{Binding [BtnResetSettings], Source={x:Static loc:LocSource.Instance}}" Margin="10,0,0,0" Click="OnResetSettingsClicked" />
+                            <Button Style="{StaticResource PrimaryButton}" Padding="20,7"
+                                    Content="{Binding [BtnSaveSettings], Source={x:Static loc:LocSource.Instance}}"
+                                    Click="OnSaveSettingsClicked" />
+                            <Button Content="{Binding [BtnResetSettings], Source={x:Static loc:LocSource.Instance}}" Margin="10,0,0,0"
+                                    Click="OnResetSettingsClicked" />
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
@@ -325,12 +576,21 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <ListView x:Name="LogList" Grid.Row="0" ItemsSource="{Binding Logs}" Background="White"
-                              BorderBrush="#E3E7EF" BorderThickness="1">
+                              BorderBrush="#E3E7EF" BorderThickness="1"
+                              VirtualizingPanel.IsVirtualizing="True"
+                              VirtualizingPanel.VirtualizationMode="Recycling"
+                              ScrollViewer.CanContentScroll="True">
                         <ListView.View>
                             <GridView>
                                 <GridViewColumn Header="{Binding [ColLogTime], Source={x:Static loc:LocSource.Instance}}" Width="90" DisplayMemberBinding="{Binding Time}" />
                                 <GridViewColumn Header="{Binding [ColLogLevel], Source={x:Static loc:LocSource.Instance}}" Width="70" DisplayMemberBinding="{Binding Level}" />
-                                <GridViewColumn Header="{Binding [ColLogMessage], Source={x:Static loc:LocSource.Instance}}" Width="820" DisplayMemberBinding="{Binding Message}" />
+                                <GridViewColumn Header="{Binding [ColLogMessage], Source={x:Static loc:LocSource.Instance}}" Width="800">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Message}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
                             </GridView>
                         </ListView.View>
                     </ListView>

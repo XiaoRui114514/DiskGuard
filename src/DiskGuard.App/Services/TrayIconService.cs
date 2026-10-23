@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -19,10 +20,13 @@ public sealed class TrayIconService : IDisposable
     private const int WM_RBUTTONUP = 0x0205;
     private const int WM_CONTEXTMENU = 0x007B;
     private const int WM_NULL = 0x0000;
+    private const uint MSGFLT_ALLOW = 1;
 
     private const uint NIM_ADD = 0x0000;
     private const uint NIM_MODIFY = 0x0001;
     private const uint NIM_DELETE = 0x0002;
+    private const uint NIM_SETVERSION = 0x0004;
+    private const uint NOTIFYICON_VERSION_4 = 4;
 
     private const uint NIF_MESSAGE = 0x0001;
     private const uint NIF_ICON = 0x0002;
@@ -43,6 +47,8 @@ public sealed class TrayIconService : IDisposable
     private readonly List<IntPtr> _ownedIcons = new();
     private readonly uint _taskbarCreatedMessage;
     private DispatcherTimer? _retryTimer;
+    private int _retryAttempts;
+    private bool _failureLogged;
 
     private IntPtr _hwnd = IntPtr.Zero;
     private IntPtr _hIcon = IntPtr.Zero;
@@ -57,6 +63,23 @@ public sealed class TrayIconService : IDisposable
 
     /// <summary>托盘图标是否已成功创建；为 false 时关闭窗口必须直接退出，否则窗口会再也打不开。</summary>
     public bool IsAvailable => _iconAdded;
+
+    /// <summary>Ask the existing process to restore its window, even when its tray icon is missing.</summary>
+    public static bool TryShowExistingInstance()
+    {
+        bool posted = false;
+        EnumWindows((hwnd, _) =>
+        {
+            var className = new StringBuilder(128);
+            int length = GetClassNameW(hwnd, className, className.Capacity);
+            if (length == 0 || !className.ToString().StartsWith("DiskGuardTraySink_", StringComparison.Ordinal))
+                return true;
+
+            posted = PostMessageW(hwnd, WM_TRAY_CALLBACK, IntPtr.Zero, (IntPtr)WM_LBUTTONDBLCLK);
+            return !posted;
+        }, IntPtr.Zero);
+        return posted;
+    }
 
     public TrayIconService(Action<string>? log = null)
     {
@@ -96,8 +119,9 @@ public sealed class TrayIconService : IDisposable
             _log?.Invoke(Loc.F(LK.LogTrayInitFailedFormat, ex.Message));
         }
 
-        // 资源管理器尚未就绪时 NIM_ADD 会失败，稍后自动重试
-        if (!_iconAdded) StartRetryTimer();
+        // 开机自启可能早于 Explorer。Shell_NotifyIcon 有时会先返回成功，图标随后又消失，
+        // 因此启动后始终保留低频健康检查，而不是只在首次失败时重试。
+        StartRetryTimer();
     }
 
     public void SetPaused(bool paused)
@@ -151,22 +175,38 @@ public sealed class TrayIconService : IDisposable
 
     private void StartRetryTimer()
     {
-        _retryTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-        int attempts = 0;
-        _retryTimer.Tick += (_, _) =>
-        {
-            if (_disposed || _iconAdded || ++attempts > 10)
-            {
-                _retryTimer?.Stop();
-                return;
-            }
+        if (_disposed) return;
 
-            AddIcon();
-        };
+        if (_retryTimer is null)
+        {
+            _retryTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+            _retryTimer.Tick += (_, _) =>
+            {
+                if (_disposed)
+                {
+                    _retryTimer?.Stop();
+                    return;
+                }
+
+                // Explorer 尚未就绪时 NIM_ADD 可能返回成功但图标随后消失。
+                // 等 Shell_TrayWnd 出现后再强制重建一次，避免依赖 Windows 11 上会误报的 GetRect。
+                if (FindWindowW("Shell_TrayWnd", null) == IntPtr.Zero)
+                {
+                    if (++_retryAttempts > 20) _retryTimer?.Stop();
+                    return;
+                }
+
+                AddIcon(forceRefresh: true);
+                if (_iconAdded) _retryTimer?.Stop();
+            };
+        }
+
+        _retryAttempts = 0;
+        _retryTimer.Stop();
         _retryTimer.Start();
     }
 
-    private void AddIcon()
+    private void AddIcon(bool forceRefresh = false)
     {
         if (_disposed || _hwnd == IntPtr.Zero || _hIcon == IntPtr.Zero) return;
 
@@ -176,14 +216,28 @@ public sealed class TrayIconService : IDisposable
         data.hIcon = _hIcon;
         data.szTip = Loc.T(LK.AppTitle);
 
+        // 启动阶段强制删掉旧条目再注册，覆盖“首次 NIM_ADD 返回成功但实际无图标”的情况。
+        if (forceRefresh)
+        {
+            Shell_NotifyIconW(NIM_DELETE, ref data);
+            _iconAdded = false;
+        }
+
         if (Shell_NotifyIconW(NIM_ADD, ref data))
         {
+            data.uVersion = NOTIFYICON_VERSION_4;
+            Shell_NotifyIconW(NIM_SETVERSION, ref data);
+            bool wasAdded = _iconAdded;
             _iconAdded = true;
-            _log?.Invoke(Loc.T(LK.LogTrayReady));
+            _failureLogged = false;
+            if (!wasAdded) _log?.Invoke(Loc.T(LK.LogTrayReady));
+            return;
         }
-        else
+
+        // 失败时不把已经成功注册的图标状态清掉；重试定时器会继续补注册。
+        if (!_iconAdded && !_failureLogged)
         {
-            _iconAdded = false;
+            _failureLogged = true;
             _log?.Invoke(Loc.T(LK.LogTrayCreateFailed));
         }
     }
@@ -208,6 +262,8 @@ public sealed class TrayIconService : IDisposable
             {
                 // 资源管理器重启后托盘被重建，需要重新注册图标
                 _iconAdded = false;
+                _failureLogged = false;
+                StartRetryTimer();
                 AddIcon();
                 return IntPtr.Zero;
             }
@@ -268,6 +324,8 @@ public sealed class TrayIconService : IDisposable
         if (hwnd == IntPtr.Zero)
             throw new InvalidOperationException("CreateWindow 失败：" + Marshal.GetLastWin32Error());
 
+        ChangeWindowMessageFilterEx(hwnd, WM_TRAY_CALLBACK, MSGFLT_ALLOW, IntPtr.Zero);
+
         return hwnd;
     }
 
@@ -287,7 +345,7 @@ public sealed class TrayIconService : IDisposable
         }
         catch
         {
-            // 回退到系统默认图标
+            // Fall back to the system icon.
         }
 
         return LoadIconW(IntPtr.Zero, (IntPtr)IDI_APPLICATION);
@@ -330,6 +388,7 @@ public sealed class TrayIconService : IDisposable
     // ---- Win32 互操作 ----
 
     private delegate IntPtr WndProcDelegate(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct NOTIFYICONDATAW
@@ -372,6 +431,20 @@ public sealed class TrayIconService : IDisposable
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern ushort RegisterClassW(ref WNDCLASSW lpWndClass);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr FindWindowW(string? lpClassName, string? lpWindowName);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetClassNameW(IntPtr hWnd, StringBuilder className, int maxCount);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ChangeWindowMessageFilterEx(IntPtr hWnd, uint message, uint action, IntPtr changeFilterStruct);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern IntPtr CreateWindowExW(uint dwExStyle, string lpClassName, string lpWindowName,
