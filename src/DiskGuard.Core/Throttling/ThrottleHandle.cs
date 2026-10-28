@@ -22,7 +22,9 @@ public sealed class ThrottleHandle
     public long CapIops { get; internal set; }
 
     public bool IsLevel3 { get; internal set; }
+    internal object SuspendSync { get; } = new();
     internal CancellationTokenSource? SuspendCts { get; set; }
+    internal Task? SuspendTask { get; set; }
 
     public int Level { get; internal set; } = 1;
     public bool IsManual { get; set; }

@@ -23,6 +23,8 @@ internal static class NativeMethods
     internal static int LastWin32Error;
     internal static int AssignCalls;
     internal static bool AssignSucceeds = true;
+    internal static Action<IntPtr>? OnClose;
+    internal static Func<IntPtr, int>? OnSuspend, OnResume;
     internal static IntPtr CreateJobObjectW(IntPtr attributes, string? name) => new(3);
     internal static uint SetIoRateControlInformationJobObject(IntPtr job, ref JOBOBJECT_IO_RATE_CONTROL_INFORMATION info)
     {
@@ -35,12 +37,16 @@ internal static class NativeMethods
         Marshal.SetLastPInvokeError(LastWin32Error);
         return AssignSucceeds;
     }
-    internal static bool CloseHandle(IntPtr handle) => true;
+    internal static bool CloseHandle(IntPtr handle)
+    {
+        OnClose?.Invoke(handle);
+        return true;
+    }
     internal static IntPtr OpenProcess(uint access, bool inherit, int pid) => throw new NotSupportedException();
     internal static int NtQueryInformationProcess(IntPtr handle, int infoClass, out int info, int size) => throw new NotSupportedException();
     internal static int NtSetInformationProcess(IntPtr handle, int infoClass, ref int info, int size) => throw new NotSupportedException();
     internal static uint GetPriorityClass(IntPtr handle) => throw new NotSupportedException();
     internal static bool SetPriorityClass(IntPtr handle, uint priority) => throw new NotSupportedException();
-    internal static int NtSuspendProcess(IntPtr handle) => throw new NotSupportedException();
-    internal static int NtResumeProcess(IntPtr handle) => throw new NotSupportedException();
+    internal static int NtSuspendProcess(IntPtr handle) => OnSuspend?.Invoke(handle) ?? throw new NotSupportedException();
+    internal static int NtResumeProcess(IntPtr handle) => OnResume?.Invoke(handle) ?? throw new NotSupportedException();
 }

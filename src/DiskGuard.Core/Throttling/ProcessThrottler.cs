@@ -172,83 +172,94 @@ public sealed class ProcessThrottler
 
     public bool StartLevel3(ThrottleHandle handle, int runMs, int pauseMs)
     {
-        if (!handle.HasHandle) return false;
-        if (handle.SuspendCts != null) return true;
-
-        var cts = new CancellationTokenSource();
-        handle.SuspendCts = cts;
-        handle.IsLevel3 = true;
-        handle.Level = 3;
-        runMs = Math.Clamp(runMs, 50, 5000);
-        pauseMs = Math.Clamp(pauseMs, 20, 5000);
-
-        _ = Task.Factory.StartNew(async () =>
+        lock (handle.SuspendSync)
         {
-            try
+            if (!handle.HasHandle) return false;
+            if (handle.SuspendCts != null) return true;
+
+            var cts = new CancellationTokenSource();
+            handle.SuspendCts = cts;
+            handle.IsLevel3 = true;
+            handle.Level = 3;
+            runMs = Math.Clamp(runMs, 50, 5000);
+            pauseMs = Math.Clamp(pauseMs, 20, 5000);
+            // Release must wait for this worker before closing this exact native handle.
+            IntPtr processHandle = handle.ProcessHandle;
+            handle.SuspendTask = Task.Run(async () =>
             {
-                while (!cts.IsCancellationRequested)
+                try
                 {
-                    if (NativeMethods.NtSuspendProcess(handle.ProcessHandle) != 0) break;
-
-                    try { await Task.Delay(pauseMs, cts.Token).ConfigureAwait(false); }
-                    catch (TaskCanceledException) { }
-
-                    NativeMethods.NtResumeProcess(handle.ProcessHandle);
-
-                    try { await Task.Delay(runMs, cts.Token).ConfigureAwait(false); }
-                    catch (TaskCanceledException) { }
+                    while (!cts.IsCancellationRequested)
+                    {
+                        if (NativeMethods.NtSuspendProcess(processHandle) != 0) break;
+                        // Balance only our successful suspension, including cancellation during the pause.
+                        try { await Task.Delay(pauseMs, cts.Token).ConfigureAwait(false); }
+                        finally { NativeMethods.NtResumeProcess(processHandle); }
+                        await Task.Delay(runMs, cts.Token).ConfigureAwait(false);
+                    }
                 }
-            }
-            finally
-            {
-                NativeMethods.NtResumeProcess(handle.ProcessHandle);
-            }
-        }, cts.Token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+                catch (OperationCanceledException) when (cts.IsCancellationRequested) { }
+            });
 
-        return true;
+            return true;
+        }
     }
 
     public void StopLevel3(ThrottleHandle handle)
     {
-        try { handle.SuspendCts?.Cancel(); } catch { }
-        handle.SuspendCts = null;
-        handle.IsLevel3 = false;
-        if (handle.Level >= 3) handle.Level = handle.IsLevel2 ? 2 : 1;
-        if (handle.HasHandle) NativeMethods.NtResumeProcess(handle.ProcessHandle);
+        lock (handle.SuspendSync)
+        {
+            try
+            {
+                handle.SuspendCts?.Cancel();
+                handle.SuspendTask?.GetAwaiter().GetResult();
+            }
+            finally
+            {
+                handle.SuspendTask = null;
+                handle.SuspendCts?.Dispose();
+                handle.SuspendCts = null;
+                handle.IsLevel3 = false;
+                if (handle.Level >= 3) handle.Level = handle.IsLevel2 ? 2 : 1;
+            }
+        }
     }
 
     public void Release(ThrottleHandle handle)
     {
-        StopLevel3(handle);
-        DisableLevel2(handle);
-
-        if (!handle.HasHandle) return;
-
-        if (handle.AppliedPriorityClass != 0 && handle.OriginalPriorityClass != 0)
+        lock (handle.SuspendSync)
         {
-            uint current = NativeMethods.GetPriorityClass(handle.ProcessHandle);
-            if (current == handle.AppliedPriorityClass)
-                NativeMethods.SetPriorityClass(handle.ProcessHandle, handle.OriginalPriorityClass);
-        }
+            StopLevel3(handle);
+            DisableLevel2(handle);
 
-        if (handle.AppliedIoPriority >= 0)
-        {
-            bool needRestore = true;
+            if (!handle.HasHandle) return;
 
-            // 能查询到原值且当前值仍是我们设置的值时，精确还原；查不到（部分环境限制）则还原为系统默认。
-            if (NativeMethods.NtQueryInformationProcess(handle.ProcessHandle, NativeMethods.ProcessIoPriority, out int current, sizeof(int)) == 0)
-                needRestore = current == handle.AppliedIoPriority;
-
-            if (needRestore)
+            if (handle.AppliedPriorityClass != 0 && handle.OriginalPriorityClass != 0)
             {
-                int original = handle.OriginalIoPriority >= 0 ? handle.OriginalIoPriority : NativeMethods.IoPriorityNormal;
-                NativeMethods.NtSetInformationProcess(handle.ProcessHandle, NativeMethods.ProcessIoPriority, ref original, sizeof(int));
+                uint current = NativeMethods.GetPriorityClass(handle.ProcessHandle);
+                if (current == handle.AppliedPriorityClass)
+                    NativeMethods.SetPriorityClass(handle.ProcessHandle, handle.OriginalPriorityClass);
             }
-        }
 
-        NativeMethods.CloseHandle(handle.ProcessHandle);
-        handle.ProcessHandle = IntPtr.Zero;
-        handle.Level = 0;
+            if (handle.AppliedIoPriority >= 0)
+            {
+                bool needRestore = true;
+
+                // 能查询到原值且当前值仍是我们设置的值时，精确还原；查不到（部分环境限制）则还原为系统默认。
+                if (NativeMethods.NtQueryInformationProcess(handle.ProcessHandle, NativeMethods.ProcessIoPriority, out int current, sizeof(int)) == 0)
+                    needRestore = current == handle.AppliedIoPriority;
+
+                if (needRestore)
+                {
+                    int original = handle.OriginalIoPriority >= 0 ? handle.OriginalIoPriority : NativeMethods.IoPriorityNormal;
+                    NativeMethods.NtSetInformationProcess(handle.ProcessHandle, NativeMethods.ProcessIoPriority, ref original, sizeof(int));
+                }
+            }
+
+            NativeMethods.CloseHandle(handle.ProcessHandle);
+            handle.ProcessHandle = IntPtr.Zero;
+            handle.Level = 0;
+        }
     }
 
     /// <summary>按状态文件还原上次异常退出时残留的限速。</summary>
