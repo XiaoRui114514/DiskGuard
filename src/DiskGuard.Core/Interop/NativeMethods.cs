@@ -127,9 +127,9 @@ internal static class NativeMethods
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool AssignProcessToJobObject(IntPtr hJob, IntPtr hProcess);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    internal static extern bool SetIoRateControlInformationJobObject(IntPtr hJob, ref JOBOBJECT_IO_RATE_CONTROL_INFORMATION lpIoRateControlInformation);
+    // This API returns a Win32 error code directly (ERROR_SUCCESS == 0), not BOOL.
+    [DllImport("kernel32.dll")]
+    internal static extern uint SetIoRateControlInformationJobObject(IntPtr hJob, ref JOBOBJECT_IO_RATE_CONTROL_INFORMATION lpIoRateControlInformation);
 
     // ---- 前台窗口 ----
     [DllImport("user32.dll")]

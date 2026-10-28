@@ -121,9 +121,10 @@ public sealed class ProcessThrottler
             ControlFlags = NativeMethods.JOBOBJECT_IO_RATE_CONTROL_ENABLE
         };
 
-        if (!NativeMethods.SetIoRateControlInformationJobObject(handle.JobHandle, ref info))
+        uint error = NativeMethods.SetIoRateControlInformationJobObject(handle.JobHandle, ref info);
+        if (error != 0)
         {
-            LastError = System.Runtime.InteropServices.Marshal.GetLastWin32Error();
+            LastError = unchecked((int)error);
             return false;
         }
 

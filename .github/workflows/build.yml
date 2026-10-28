@@ -30,6 +30,12 @@ jobs:
       - name: 校验开发者记录的十分钟滚动窗口
         run: dotnet run --project tools/diagnostics-check/DiagnosticsCheck.csproj -c Release
 
+      - name: 校验限速 API 返回值与失败处理
+        run: dotnet run --project tools/throttling-check/ThrottlingCheck.csproj -c Release
+
+      - name: 校验硬上限恢复与 ETW 自动降级
+        run: dotnet run --project tools/engine-check/EngineCheck.csproj -c Release
+
       - name: 采样自检（CLI）
         run: src\DiskGuard.Cli\bin\Release\net8.0-windows\DiskGuard.Cli.exe sample --seconds 3
 

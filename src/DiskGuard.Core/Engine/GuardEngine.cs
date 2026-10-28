@@ -220,11 +220,7 @@ public sealed class GuardEngine : IDisposable
 
             _ioSource?.Dispose();
             _ioSource = ProcessIoSourceFactory.Create(_settings.DiskNumber, m => _log.Info(m));
-            _samplingDiskNumber = _settings.DiskNumber;
-            _lastEventCount = 0;
-            _lastEventGrowth = DateTime.Now;
-            _lastBusyAt = DateTime.MinValue;
-            _sourceRebuildCount = 0;
+            ResetSourceTracking(_settings.DiskNumber, recreate);
             lock (_stateSync)
             {
                 _busyHistory.Clear();
@@ -241,6 +237,17 @@ public sealed class GuardEngine : IDisposable
                 ? Loc.F(LK.EngineRebuildFailedFormat, ex.Message)
                 : Loc.F(LK.EngineStartFailedFormat, ex.Message));
         }
+    }
+
+    private void ResetSourceTracking(int diskNumber, bool recreate)
+    {
+        // 健康检查重建同一块盘时保留失败次数；只有实际收到事件后才证明已恢复。
+        // 否则每次重建都会归零，连续三次无事件的回退分支永远无法到达。
+        if (!recreate || diskNumber != _samplingDiskNumber) _sourceRebuildCount = 0;
+        _samplingDiskNumber = diskNumber;
+        _lastEventCount = 0;
+        _lastEventGrowth = DateTime.Now;
+        _lastBusyAt = DateTime.MinValue;
     }
 
     /// <summary>
@@ -755,7 +762,9 @@ public sealed class GuardEngine : IDisposable
 
         // 用滑动窗口平均值判定，避免忙率在阈值附近波动时永远无法触发
         _busyHistory.Enqueue(busy);
-        while (_busyHistory.Count > Math.Max(triggerSamples, recoverSamples)) _busyHistory.Dequeue();
+        // 硬限速固定需要两个安全采样，用户把普通窗口设成 1 秒时也必须保留足够历史。
+        int historyLength = Math.Max(Math.Max(triggerSamples, recoverSamples), DiskBusyRecoverySamples);
+        while (_busyHistory.Count > historyLength) _busyHistory.Dequeue();
 
         bool high = _busyHistory.Count >= triggerSamples && WindowAverage(triggerSamples) >= _settings.TriggerPercent;
         // 还原条件更严格：最近 recoverSamples 秒里最忙的一秒也不高于恢复阈值，避免刚限速就抖动还原
