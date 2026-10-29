@@ -5,6 +5,14 @@ internal static partial class Catalog
     /// <summary>العربية (من اليمين إلى اليسار).</summary>
     internal static Dictionary<LK, string> Ar() => new()
     {
+        [LK.BtnRetrySource] = "إعادة محاولة الإحصاءات الدقيقة",
+        [LK.BtnExportDiagnostics] = "تصدير التشخيص",
+        [LK.SourcePrecise] = "إحصاءات دقيقة",
+        [LK.SourceApproximate] = "إحصاءات تقريبية (راجع التفاصيل)",
+        [LK.SourceRetryQueued] = "تمت جدولة إعادة المحاولة",
+        [LK.SourceRetryCooldown] = "يمكن إعادة المحاولة كل 30 ثانية أثناء التشغيل",
+        [LK.DiskIdentityUnavailable] = "تعذر قراءة معرف القرص؛ سياسات القرص معطلة",
+        [LK.DiagnosticsPreview] = "تصدير الإصدار والإعدادات وآخر حالة والسجلات أدناه. يتضمن أسماء العمليات والمسارات. هل تريد المتابعة؟",
         [LK.AppTitle] = "DiskGuard",
         [LK.BtnCopy] = "نسخ",
         [LK.VersionShortFormat] = "الإصدار {0}",

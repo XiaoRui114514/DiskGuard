@@ -5,6 +5,14 @@ internal static partial class Catalog
     /// <summary>繁體中文（台灣用語）。</summary>
     internal static Dictionary<LK, string> ZhHant() => new()
     {
+        [LK.BtnRetrySource] = "重試精確統計",
+        [LK.BtnExportDiagnostics] = "匯出診斷包",
+        [LK.SourcePrecise] = "精確統計",
+        [LK.SourceApproximate] = "近似統計（詳情見提示）",
+        [LK.SourceRetryQueued] = "已安排背景重試",
+        [LK.SourceRetryCooldown] = "執行中每30秒可重試一次",
+        [LK.DiskIdentityUnavailable] = "無法讀取穩定磁碟身分，未啟用按碟策略",
+        [LK.DiagnosticsPreview] = "將匯出版本、設定、最近快照及以下日誌；可能含程序名稱與路徑。繼續？",
         [LK.AppTitle] = "磁碟守護 DiskGuard",
         [LK.BtnCopy] = "複製",
         [LK.VersionShortFormat] = "版本 {0}",

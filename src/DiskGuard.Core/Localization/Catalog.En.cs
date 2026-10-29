@@ -5,6 +5,14 @@ internal static partial class Catalog
     /// <summary>English.</summary>
     internal static Dictionary<LK, string> En() => new()
     {
+        [LK.BtnRetrySource] = "Retry precise statistics",
+        [LK.BtnExportDiagnostics] = "Export diagnostics",
+        [LK.SourcePrecise] = "Precise statistics",
+        [LK.SourceApproximate] = "Approximate statistics (see details)",
+        [LK.SourceRetryQueued] = "Background retry queued",
+        [LK.SourceRetryCooldown] = "Retry once per 30 seconds while running",
+        [LK.DiskIdentityUnavailable] = "Disk identity unavailable; per-disk policies disabled",
+        [LK.DiagnosticsPreview] = "Export version, settings, latest snapshot and logs below. Includes process names and paths. Continue?",
         [LK.AppTitle] = "DiskGuard",
         [LK.BtnCopy] = "Copy",
         [LK.VersionShortFormat] = "Version {0}",

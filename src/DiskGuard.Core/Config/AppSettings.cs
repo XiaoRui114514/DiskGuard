@@ -5,6 +5,8 @@ namespace DiskGuard.Core.Config;
 
 public sealed class AppSettings
 {
+    public string SelectedDiskIdentity { get; set; } = string.Empty;
+    public Dictionary<string, DiskPolicy> DiskProfiles { get; set; } = new();
     [JsonPropertyName("diskNumber")] public int DiskNumber { get; set; } = 0;
 
     [JsonPropertyName("triggerPercent")] public double TriggerPercent { get; set; } = 80;
@@ -71,6 +73,8 @@ public sealed class AppSettings
                 var loaded = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path), Options);
                 if (loaded != null)
                 {
+                    loaded.SelectedDiskIdentity ??= string.Empty;
+                    loaded.DiskProfiles ??= new();
                     loaded.Whitelist ??= new List<string>();
                     loaded.PausedServicesOnStartup ??= new List<string>();
                     return loaded;

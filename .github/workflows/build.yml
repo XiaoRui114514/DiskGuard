@@ -2,7 +2,7 @@ name: build
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, 'codex/features-*' ]
     tags: [ 'v*' ]
   pull_request:
   workflow_dispatch:
@@ -35,6 +35,12 @@ jobs:
 
       - name: 校验硬上限恢复与 ETW 自动降级
         run: dotnet run --project tools/engine-check/EngineCheck.csproj -c Release
+
+      - name: 校验每盘策略隔离与保存
+        run: dotnet run --project tools/policy-check/PolicyCheck.csproj -c Release
+
+      - name: 原生临时子进程限速与恢复
+        run: dotnet run --project tools/native-check/NativeCheck.csproj -c Release
 
       - name: 采样自检（CLI）
         run: src\DiskGuard.Cli\bin\Release\net8.0-windows\DiskGuard.Cli.exe sample --seconds 3

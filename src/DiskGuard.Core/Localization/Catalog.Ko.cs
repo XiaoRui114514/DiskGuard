@@ -5,6 +5,14 @@ internal static partial class Catalog
     /// <summary>한국어.</summary>
     internal static Dictionary<LK, string> Ko() => new()
     {
+        [LK.BtnRetrySource] = "정밀 통계 재시도",
+        [LK.BtnExportDiagnostics] = "진단 내보내기",
+        [LK.SourcePrecise] = "정밀 통계",
+        [LK.SourceApproximate] = "근사 통계 (세부 정보 확인)",
+        [LK.SourceRetryQueued] = "백그라운드 재시도 예약됨",
+        [LK.SourceRetryCooldown] = "실행 중 30초마다 재시도 가능",
+        [LK.DiskIdentityUnavailable] = "디스크 ID 없음: 개별 정책 비활성화",
+        [LK.DiagnosticsPreview] = "버전, 설정, 최근 상태 및 아래 로그를 내보냅니다. 프로세스 이름과 경로가 포함됩니다. 계속할까요?",
         [LK.AppTitle] = "DiskGuard",
         [LK.BtnCopy] = "복사",
         [LK.VersionShortFormat] = "버전 {0}",

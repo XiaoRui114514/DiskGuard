@@ -5,6 +5,14 @@ internal static partial class Catalog
     /// <summary>简体中文（默认语言 / 原始文案）。</summary>
     internal static Dictionary<LK, string> ZhHans() => new()
     {
+        [LK.BtnRetrySource] = "重试精确统计",
+        [LK.BtnExportDiagnostics] = "导出诊断包",
+        [LK.SourcePrecise] = "精确统计",
+        [LK.SourceApproximate] = "近似统计（详情见提示）",
+        [LK.SourceRetryQueued] = "已安排后台重试",
+        [LK.SourceRetryCooldown] = "运行中每30秒可重试一次",
+        [LK.DiskIdentityUnavailable] = "无法读取稳定磁盘身份，未启用按盘策略",
+        [LK.DiagnosticsPreview] = "将导出版本、设置、最近快照和以下日志；可能含进程名及路径。确认继续？",
         [LK.AppTitle] = "磁盘守护 DiskGuard",
         [LK.BtnCopy] = "复制",
         [LK.VersionShortFormat] = "版本 {0}",

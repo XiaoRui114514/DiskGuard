@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.IO.Compression;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -41,6 +43,10 @@ public partial class MainWindow : Window
     private bool _updatingSystemControls;
     private readonly Dictionary<int, ProcessRowVm> _rowMap = new();
     private bool _exiting;
+    private bool _identityPause;
+    private int _diskSelectionRevision;
+    private EngineSnapshot? _lastSnapshot;
+    private readonly Dictionary<int, string> _diskIdentities = new();
     private bool _applyingSettings;
     private readonly object _snapshotSync = new();
     private EngineSnapshot? _pendingSnapshot;
@@ -58,12 +64,14 @@ public partial class MainWindow : Window
 
         _engine = engine;
         _settings = settings;
+        if (settings.SelectedDiskIdentity.Length > 0) { _identityPause = true; _engine.Pause(); }
         _logger = logger;
         _developerRecorder = developerRecorder;
         _settingsVm = SettingsVm.From(settings);
         Settings = _settingsVm;
 
         DataContext = this;
+        Loaded += async (_, _) => await LoadDiskIdentitiesAsync();
 
         _serviceToggles["SysMain"] = StopSysMainCheck;
         _serviceToggles["WSearch"] = StopWSearchCheck;
@@ -173,6 +181,10 @@ public partial class MainWindow : Window
 
     private void ApplySnapshotCore(EngineSnapshot snapshot)
     {
+        _lastSnapshot = snapshot;
+        SourceDetailsText.Text = (snapshot.IoPrecise ? Loc.T(LK.SourcePrecise) : Loc.T(LK.SourceApproximate)) + " · " + snapshot.IoMode;
+        SourceDetailsText.ToolTip = snapshot.IoHealthError;
+
         BusyText.Text = Loc.Value($"{snapshot.BusyPercent:0}%");
         BusyBar.Value = Math.Clamp(snapshot.BusyPercent, 0, 100);
         DetailText.Text = Loc.F(LK.DetailFormat,
@@ -252,7 +264,7 @@ public partial class MainWindow : Window
             {
                 _applyingSettings = true;
                 DiskCombo.ItemsSource = snapshot.Disks;
-                DiskCombo.SelectedItem = snapshot.Disks.FirstOrDefault(d => d.DiskNumber == snapshot.DiskNumber) ?? snapshot.Disks.FirstOrDefault();
+                DiskCombo.SelectedItem = snapshot.Disks.FirstOrDefault(d => d.DiskNumber == snapshot.DiskNumber);
                 _applyingSettings = false;
             }
         }
@@ -387,14 +399,120 @@ public partial class MainWindow : Window
         _logger.Info(Loc.F(LK.LogLanguageChangedFormat, Loc.NativeName(language)));
     }
 
-    private void OnDiskChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    private async Task<bool> ReadDiskIdentitiesAsync()
+    {
+        var result = await Task.Run(() => PowerShellRunner.Run("[Console]::OutputEncoding=[Text.Encoding]::UTF8; @(Get-Disk | Select-Object Number,UniqueId) | ConvertTo-Json -Compress", 15000));
+        if (result.ExitCode != 0) { _diskIdentities.Clear(); DiskCombo.ToolTip = Loc.T(LK.DiskIdentityUnavailable); return false; }
+        try
+        {
+            using var json = JsonDocument.Parse(result.Stdout);
+            var rows = json.RootElement.ValueKind == JsonValueKind.Array ? json.RootElement.EnumerateArray().ToArray() : new[] { json.RootElement };
+            var entries = rows.Select(r => (Number:r.GetProperty("Number").GetInt32(), Id:r.GetProperty("UniqueId").GetString()?.Trim() ?? "")).Where(r => r.Id.Length > 0).ToArray();
+            _diskIdentities.Clear();
+            foreach (var row in entries.Where(r => entries.Count(x => x.Id == r.Id) == 1)) _diskIdentities[row.Number] = row.Id;
+            return true;
+        }
+        catch (Exception ex) { _diskIdentities.Clear(); DiskCombo.ToolTip = Loc.T(LK.DiskIdentityUnavailable); _logger.Warn(ex.Message); return false; }
+    }
+
+    private async Task LoadDiskIdentitiesAsync()
+    {
+        if (!await ReadDiskIdentitiesAsync()) return;
+        try
+        {
+            var saved = _settings.SelectedDiskIdentity;
+            var matching = _diskIdentities.Where(x => x.Value == saved).ToArray();
+            if (saved.Length > 0 && matching.Length == 0)
+            {
+                _engine.Pause();
+                _settings.DiskNumber = -1;
+                _engine.UpdateSettings(_settings);
+                DiskCombo.ToolTip = Loc.T(LK.DiskIdentityUnavailable); return;
+            }
+            if (matching.Length == 1) _settings.DiskNumber = matching[0].Key;
+            if (saved.Length == 0) SaveDiskPolicy();
+            SelectDiskPolicy();
+            _settingsVm.ReloadFrom(_settings);
+            _settings.Save(AppPaths.SettingsFile);
+            _engine.UpdateSettings(_settings);
+            if (_identityPause) { _identityPause = false; _engine.Resume(); }
+        }
+        catch (Exception ex) { _logger.Warn(ex.Message); }
+    }
+
+    private void SaveDiskPolicy()
+    {
+        string id = _settings.SelectedDiskIdentity;
+        if (id.Length == 0)
+        {
+            if (!_diskIdentities.TryGetValue(_settings.DiskNumber, out var resolved) || string.IsNullOrEmpty(resolved)) return;
+            id = resolved;
+        }
+        _settings.DiskProfiles[id] = DiskPolicy.Capture(_settings);
+        _settings.SelectedDiskIdentity = id;
+    }
+
+    private void SelectDiskPolicy()
+    {
+        if (!_diskIdentities.TryGetValue(_settings.DiskNumber, out var id)) { _settings.SelectedDiskIdentity = string.Empty; return; }
+        if (_settings.DiskProfiles.TryGetValue(id, out var policy) && policy != null) policy.Apply(_settings);
+        else DiskPolicy.Capture(new AppSettings()).Apply(_settings);
+        _settings.SelectedDiskIdentity = id;
+    }
+
+    private void OnRetrySourceClicked(object sender, RoutedEventArgs e)
+    {
+        SourceDetailsText.ToolTip = _engine.RequestPreciseStatistics() ? Loc.T(LK.SourceRetryQueued) : Loc.T(LK.SourceRetryCooldown);
+    }
+
+    private async void OnExportDiagnosticsClicked(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await _developerRecorder.FlushAsync();
+            var files = new[] { AppPaths.LogDirectory, AppPaths.DeveloperLogDirectory }.Where(Directory.Exists)
+                .SelectMany(d => Directory.EnumerateFiles(d)).Select(p => new FileInfo(p))
+                .Where(f => f.Length <= 10 * 1024 * 1024 && f.Extension != ".zip" && !f.Attributes.HasFlag(FileAttributes.ReparsePoint)).OrderByDescending(f => f.LastWriteTimeUtc).Take(20).ToArray();
+            var preview = Loc.T(LK.DiagnosticsPreview) + "\n\n" + string.Join("\n", files.Select(f => f.Directory!.Name + "/" + f.Name));
+            if (System.Windows.MessageBox.Show(preview, Loc.T(LK.BtnExportDiagnostics), MessageBoxButton.OKCancel) != MessageBoxResult.OK) return;
+            var dialog = new Microsoft.Win32.SaveFileDialog { Filter = "ZIP|*.zip", FileName = "DiskGuard-diagnostics-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".zip" };
+            if (dialog.ShowDialog() != true) return;
+            var settingsJson = JsonSerializer.Serialize(_settings, new JsonSerializerOptions { WriteIndented = true });
+            var snapshotJson = JsonSerializer.Serialize(new { version = _version, snapshot = _lastSnapshot });
+            await Task.Run(() =>
+            {
+                using var archiveFile = new FileStream(dialog.FileName, FileMode.Create, FileAccess.Write, FileShare.None);
+                using var zip = new ZipArchive(archiveFile, ZipArchiveMode.Create);
+                using (var writer = new StreamWriter(zip.CreateEntry("settings.json").Open())) writer.Write(settingsJson);
+                using (var writer = new StreamWriter(zip.CreateEntry("snapshot.json").Open())) writer.Write(snapshotJson);
+                foreach (var file in files)
+                {
+                    using var input = new FileStream(file.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    using var output = zip.CreateEntry(file.Directory!.Name + "/" + file.Name).Open();
+                    var buffer = new byte[8192]; long left = 10 * 1024 * 1024;
+                    int read;
+                    while (left > 0 && (read = input.Read(buffer, 0, (int)Math.Min(buffer.Length, left))) > 0) { output.Write(buffer, 0, read); left -= read; }
+                }
+            });
+        }
+        catch (Exception ex) { System.Windows.MessageBox.Show(ex.Message, Loc.T(LK.BtnExportDiagnostics), MessageBoxButton.OK, MessageBoxImage.Warning); }
+    }
+
+    private async void OnDiskChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
         if (_applyingSettings) return;
         if (DiskCombo.SelectedItem is not DiskStatus disk) return;
         if (disk.DiskNumber < 0) return;
         if (_settings.DiskNumber == disk.DiskNumber) return;
 
+        int revision = ++_diskSelectionRevision;
+        bool identified = await ReadDiskIdentitiesAsync();
+        if (revision != _diskSelectionRevision) return;
+        SaveDiskPolicy();
+        _engine.ReleaseTarget(Loc.T(LK.StateMonitoring));
         _settings.DiskNumber = disk.DiskNumber;
+        if (identified) SelectDiskPolicy(); else _settings.SelectedDiskIdentity = string.Empty;
+        _settingsVm.ReloadFrom(_settings);
         _settings.Save(AppPaths.SettingsFile);
         _engine.UpdateSettings(_settings);
     }
@@ -403,6 +521,7 @@ public partial class MainWindow : Window
 
     private void TogglePause()
     {
+        _identityPause = false;
         if (_engine.Paused) _engine.Resume();
         else _engine.Pause();
     }
@@ -457,6 +576,7 @@ public partial class MainWindow : Window
     private void OnSaveSettingsClicked(object sender, RoutedEventArgs e)
     {
         _settingsVm.ApplyTo(_settings);
+        SaveDiskPolicy();
         _settings.Save(AppPaths.SettingsFile);
         _engine.UpdateSettings(_settings);
         _logger.WriteToFile = _settings.WriteLogFile;
@@ -474,6 +594,7 @@ public partial class MainWindow : Window
         _settingsVm.ReloadFrom(defaults);
         _settings.PausedServicesOnStartup.Clear();
         _settingsVm.ApplyTo(_settings);
+        SaveDiskPolicy();
         _settings.Save(AppPaths.SettingsFile);
         _engine.UpdateSettings(_settings);
         _logger.WriteToFile = _settings.WriteLogFile;

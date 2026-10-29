@@ -5,6 +5,14 @@ internal static partial class Catalog
     /// <summary>日本語。</summary>
     internal static Dictionary<LK, string> Ja() => new()
     {
+        [LK.BtnRetrySource] = "正確な統計を再試行",
+        [LK.BtnExportDiagnostics] = "診断をエクスポート",
+        [LK.SourcePrecise] = "正確な統計",
+        [LK.SourceApproximate] = "概算統計（詳細を確認）",
+        [LK.SourceRetryQueued] = "バックグラウンドで再試行します",
+        [LK.SourceRetryCooldown] = "実行中は30秒ごとに再試行できます",
+        [LK.DiskIdentityUnavailable] = "ディスクID取得不可：個別ポリシー無効",
+        [LK.DiagnosticsPreview] = "バージョン、設定、最新状態、以下のログを出力します。プロセス名とパスを含みます。続行しますか？",
         [LK.AppTitle] = "DiskGuard",
         [LK.BtnCopy] = "コピー",
         [LK.VersionShortFormat] = "バージョン {0}",

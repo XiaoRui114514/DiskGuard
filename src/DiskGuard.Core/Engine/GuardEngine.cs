@@ -101,6 +101,19 @@ public sealed class GuardEngine : IDisposable
     private DiskSampler? _diskSampler;
     private IProcessIoSource? _ioSource;
     private volatile bool _restartRequested;
+    private readonly object _retrySync = new();
+    private DateTime _lastManualRetry = DateTime.MinValue;
+    private string _sourceFallbackReason = string.Empty;
+    public bool RequestPreciseStatistics()
+    {
+        lock (_retrySync)
+        {
+            if (!Running || DateTime.UtcNow - _lastManualRetry < TimeSpan.FromSeconds(30)) return false;
+            _lastManualRetry = DateTime.UtcNow;
+            _restartRequested = true;
+            return true;
+        }
+    }
     private volatile bool _paused;
     private int _samplingDiskNumber;
     private readonly object _recordSync = new();
@@ -219,7 +232,9 @@ public sealed class GuardEngine : IDisposable
             if (!recreate) ProcessIoSourceFactory.CleanupStaleSessions(m => _log.Info(m));
 
             _ioSource?.Dispose();
-            _ioSource = ProcessIoSourceFactory.Create(_settings.DiskNumber, m => _log.Info(m));
+            string lastSourceMessage = string.Empty;
+            _ioSource = ProcessIoSourceFactory.Create(_settings.DiskNumber, m => { lastSourceMessage = m; _log.Info(m); });
+            _sourceFallbackReason = _ioSource.IsPrecise ? string.Empty : lastSourceMessage;
             ResetSourceTracking(_settings.DiskNumber, recreate);
             lock (_stateSync)
             {
@@ -284,6 +299,7 @@ public sealed class GuardEngine : IDisposable
             {
                 _ioSource?.Dispose();
                 _ioSource = new IoCountersProcessIoSource();
+                _sourceFallbackReason = Loc.T(LK.EngineApproxFallback);
             }
             catch (Exception ex)
             {
@@ -670,7 +686,7 @@ public sealed class GuardEngine : IDisposable
                 SampleDurationMs = Stopwatch.GetElapsedTime(sampleStarted).TotalMilliseconds,
                 ForegroundPid = observedForegroundPid,
                 IoEventCount = source is EtwProcessIoSource events ? events.EventCount : -1,
-                IoHealthError = source.HealthError,
+                IoHealthError = string.IsNullOrEmpty(source.HealthError) ? _sourceFallbackReason : source.HealthError,
                 Rows = rows.Count > 25 ? rows.GetRange(0, 25) : rows,
                 ActivePid = _target?.Pid ?? -1,
                 ActiveName = _target?.Name ?? string.Empty,

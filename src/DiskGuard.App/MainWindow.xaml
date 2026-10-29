@@ -236,6 +236,11 @@
             </Grid>
         </Border>
 
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="14,5">
+            <TextBlock x:Name="SourceDetailsText" TextWrapping="Wrap" VerticalAlignment="Center" MaxWidth="400" />
+            <Button Content="{Binding [BtnRetrySource], Source={x:Static loc:LocSource.Instance}}" Click="OnRetrySourceClicked" Margin="8,0" />
+            <Button Content="{Binding [BtnExportDiagnostics], Source={x:Static loc:LocSource.Instance}}" Click="OnExportDiagnosticsClicked" />
+        </StackPanel>
         <!-- 底部状态栏 -->
         <Border DockPanel.Dock="Bottom" Height="32" Background="#EDF0F6" BorderBrush="#E3E7EF" BorderThickness="0,1,0,0">
             <DockPanel Margin="14,0">

@@ -6,6 +6,15 @@ namespace DiskGuard.Core.Localization;
 /// </summary>
 public enum LK
 {
+    BtnRetrySource,
+    BtnExportDiagnostics,
+    SourcePrecise,
+    SourceApproximate,
+    SourceRetryQueued,
+    SourceRetryCooldown,
+    DiskIdentityUnavailable,
+    DiagnosticsPreview,
+
     // —— 通用 ——
     AppTitle,
     BtnCopy,
