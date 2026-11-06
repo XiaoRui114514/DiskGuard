@@ -1,4 +1,4 @@
-using System.Text.Json;
+using System.Runtime.InteropServices;
 
 namespace DiskGuard.App.Services;
 
@@ -9,44 +9,40 @@ public static class ScheduledTaskService
 {
     public static ScheduledTaskStatus GetStatus()
     {
-        const string script = """
-$ErrorActionPreference = 'Stop'
-$OutputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
-try {
-    $task = Get-ScheduledTask -TaskName 'ScheduledDefrag' -TaskPath '\Microsoft\Windows\Defrag\' -ErrorAction Stop
-    [pscustomobject]@{
-        Available = $true
-        Enabled = ([string]$task.State -ne 'Disabled')
-        State = [string]$task.State
-        Error = ''
-    } | ConvertTo-Json -Compress
-}
-catch {
-    [pscustomobject]@{
-        Available = $false
-        Enabled = $false
-        State = ''
-        Error = [string]$_.Exception.Message
-    } | ConvertTo-Json -Compress
-}
-""";
-        var (exitCode, stdout, stderr) = PowerShellRunner.Run(script);
-        if (exitCode != 0)
-            return new ScheduledTaskStatus(false, false, string.Empty,
-                string.IsNullOrWhiteSpace(stderr) ? $"PowerShell exit code {exitCode}" : stderr.Trim());
-
+        object? scheduler = null, folder = null, task = null;
         try
         {
-            var dto = JsonSerializer.Deserialize<TaskStatusDto>(
-                ExtractJson(stdout), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            return dto == null
-                ? new ScheduledTaskStatus(false, false, string.Empty, "Task status could not be parsed")
-                : new ScheduledTaskStatus(dto.Available, dto.Enabled, dto.State ?? string.Empty, dto.Error ?? string.Empty);
+            var type = Type.GetTypeFromProgID("Schedule.Service");
+            if (type == null) return new(false, false, string.Empty, "Task Scheduler is unavailable");
+            scheduler = Activator.CreateInstance(type);
+            if (scheduler == null) return new(false, false, string.Empty, "Task Scheduler could not be created");
+            ((dynamic)scheduler).Connect();
+            folder = ((dynamic)scheduler).GetFolder(@"\Microsoft\Windows\Defrag");
+            task = ((dynamic)folder).GetTask("ScheduledDefrag");
+            bool enabled = ((dynamic)task).Enabled;
+            int state = ((dynamic)task).State;
+            string stateText = state switch
+            {
+                1 => "Disabled", 2 => "Queued", 3 => "Ready", 4 => "Running", _ => "Unknown"
+            };
+            return new(true, enabled, stateText, string.Empty);
         }
         catch (Exception ex)
         {
-            return new ScheduledTaskStatus(false, false, string.Empty, ex.Message);
+            return new(false, false, string.Empty, ex.Message);
         }
+        finally
+        {
+            ReleaseCom(task);
+            ReleaseCom(folder);
+            ReleaseCom(scheduler);
+        }
+    }
+
+    private static void ReleaseCom(object? value)
+    {
+        if (value == null || !Marshal.IsComObject(value)) return;
+        try { Marshal.ReleaseComObject(value); } catch { }
     }
 
     public static DefenderOperationResult SetEnabled(bool enabled)
@@ -88,18 +84,4 @@ catch {
             final.Available ? $"Final task state: {final.State}" : final.Error);
     }
 
-    private static string ExtractJson(string text)
-    {
-        int start = text.IndexOf('{');
-        int end = text.LastIndexOf('}');
-        return start >= 0 && end > start ? text[start..(end + 1)].Trim() : string.Empty;
-    }
-
-    private sealed class TaskStatusDto
-    {
-        public bool Available { get; set; }
-        public bool Enabled { get; set; }
-        public string? State { get; set; }
-        public string? Error { get; set; }
-    }
 }

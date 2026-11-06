@@ -27,6 +27,9 @@ jobs:
       - name: 校验六种界面语言的词条完整性
         run: src\DiskGuard.Cli\bin\Release\net8.0-windows\DiskGuard.Cli.exe i18n
 
+      - name: 校验系统优化检查与启动方式判定
+        run: dotnet run --project tools/optimization-check/OptimizationCheck.csproj -c Release
+
       - name: 校验开发者记录的十分钟滚动窗口
         run: dotnet run --project tools/diagnostics-check/DiagnosticsCheck.csproj -c Release
 

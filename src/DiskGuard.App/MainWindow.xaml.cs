@@ -35,10 +35,11 @@ public partial class MainWindow : Window
     private DeveloperLogWindow? _developerLogWindow;
     private readonly TrayIconService _tray;
     private readonly SettingsVm _settingsVm;
-    private readonly Dictionary<string, CheckBox> _serviceToggles = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, SystemServiceOptionVm> _serviceOptions = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ServiceProbe> _lastServiceStates = new(StringComparer.OrdinalIgnoreCase);
     private DefenderStatus? _lastDefenderStatus;
     private ScheduledTaskStatus _lastScheduledTaskStatus;
+    private SystemStartupStatus? _lastSystemStartup;
     private bool _systemControlsBusy;
     private bool _updatingSystemControls;
     private readonly Dictionary<int, ProcessRowVm> _rowMap = new();
@@ -51,12 +52,25 @@ public partial class MainWindow : Window
     private readonly object _snapshotSync = new();
     private EngineSnapshot? _pendingSnapshot;
     private bool _snapshotQueued;
-    private bool _trayPausedShown;
+    private readonly UiRefreshGate _uiRefreshGate = new();
+    private volatile bool _trayPausedShown;
+    private volatile bool _uiPaintEnabled;
+    private volatile bool _logListVisible;
+    private readonly Task _initialSystemControlsTask;
+    private bool _optimizationInitialized;
     private string _version = "1.0.0";
 
     public ObservableCollection<ProcessRowVm> Rows { get; } = new();
     public ObservableCollection<LogRowVm> Logs { get; } = new();
+    public ObservableCollection<SystemStartupRowVm> SystemStartupRows { get; } = new();
+    public IEnumerable<SystemServiceOptionVm> DiskServiceOptions => ServiceOptions(SystemServiceGroup.Disk);
+    public IEnumerable<SystemServiceOptionVm> BackgroundServiceOptions => ServiceOptions(SystemServiceGroup.Background);
+    public IEnumerable<SystemServiceOptionVm> DeviceServiceOptions => ServiceOptions(SystemServiceGroup.Devices);
+    public IEnumerable<SystemServiceOptionVm> GamingServiceOptions => ServiceOptions(SystemServiceGroup.Gaming);
     public SettingsVm Settings { get; }
+
+    private IEnumerable<SystemServiceOptionVm> ServiceOptions(SystemServiceGroup group) =>
+        _serviceOptions.Values.Where(option => option.Definition.Group == group);
 
     public MainWindow(GuardEngine engine, AppSettings settings, AppLogger logger, DeveloperRecorder developerRecorder)
     {
@@ -70,18 +84,14 @@ public partial class MainWindow : Window
         _settingsVm = SettingsVm.From(settings);
         Settings = _settingsVm;
 
+        foreach (var definition in SystemServiceCatalog.Services.Where(service => service.CanPause))
+            _serviceOptions[definition.Name] = new SystemServiceOptionVm(definition);
         DataContext = this;
         Loaded += async (_, _) => await LoadDiskIdentitiesAsync();
-
-        _serviceToggles["SysMain"] = StopSysMainCheck;
-        _serviceToggles["WSearch"] = StopWSearchCheck;
-        _serviceToggles["DoSvc"] = StopDoSvcCheck;
-        _serviceToggles["wuauserv"] = StopWuauservCheck;
-        _serviceToggles["BITS"] = StopBitsCheck;
         UpdateSystemControlAvailability();
 
-        // 设置页还没打开也要执行：开机计划任务从托盘启动时同样会应用记住的暂停项。
-        _ = RefreshSystemControlsAsync(applyRememberedPauses: true);
+        // 优化页还没打开也要执行：开机计划任务从托盘启动时同样会应用记住的暂停项。
+        _initialSystemControlsTask = RefreshSystemControlsAsync(applyRememberedPauses: true);
 
         _tray = new TrayIconService(message => _logger.Info(message));
         _tray.ShowWindowRequested += ShowFromTray;
@@ -125,7 +135,8 @@ public partial class MainWindow : Window
         AboutVersionText.Text = Loc.F(LK.VersionFullFormat, _version);
         PrivilegeText.Text = Loc.T(ElevationService.IsElevated ? LK.PrivilegeAdmin : LK.PrivilegeUser);
         RefreshSystemControlTexts();
-        RefreshSystemControlTexts();
+        RefreshSystemStartupTexts();
+        foreach (var option in _serviceOptions.Values) option.RefreshTexts();
 
         // 磁盘下拉框的显示名（“磁盘 0 (C: D:)”）是按语言现算的，清空后由下一次快照重建
         DiskCombo.ItemsSource = null;
@@ -142,7 +153,9 @@ public partial class MainWindow : Window
         lock (_snapshotSync)
         {
             _pendingSnapshot = snapshot;
+            if (!_uiPaintEnabled && snapshot.Paused == _trayPausedShown) return;
             if (_snapshotQueued) return;
+            if (_uiPaintEnabled && !_uiRefreshGate.ShouldRefresh(snapshot, Stopwatch.GetTimestamp())) return;
             _snapshotQueued = true;
         }
 
@@ -159,7 +172,46 @@ public partial class MainWindow : Window
             _snapshotQueued = false;
         }
 
-        if (snapshot != null) ApplySnapshot(snapshot);
+        if (snapshot == null) return;
+        if (_trayPausedShown != snapshot.Paused)
+        {
+            _trayPausedShown = snapshot.Paused;
+            _tray.SetPaused(snapshot.Paused);
+        }
+        if (_uiPaintEnabled) ApplySnapshot(snapshot);
+        else _lastSnapshot = snapshot;
+    }
+
+    private void OnWindowVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e) => UpdateWindowPaintState();
+    private void OnWindowStateChanged(object? sender, EventArgs e) => UpdateWindowPaintState();
+
+    private void UpdateWindowPaintState()
+    {
+        _uiPaintEnabled = IsVisible && WindowState != WindowState.Minimized;
+        if (!_uiPaintEnabled) return;
+        lock (_snapshotSync)
+        {
+            _uiRefreshGate.Reset();
+            if (_pendingSnapshot == null || _snapshotQueued) return;
+            _snapshotQueued = true;
+        }
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(DrainSnapshot));
+        if (_logListVisible) RebuildLogList();
+    }
+
+    private void OnLogListVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        _logListVisible = LogList.IsVisible;
+        if (_logListVisible && _logger != null) RebuildLogList();
+    }
+
+    private async void OnOptimizationLoaded(object sender, RoutedEventArgs e)
+    {
+        if (_optimizationInitialized) return;
+        await _initialSystemControlsTask;
+        if (!OptimizationScroll.IsVisible || _exiting) return;
+        _optimizationInitialized = true;
+        await RefreshSystemControlsAsync(applyRememberedPauses: false);
     }
 
     private void ApplySnapshot(EngineSnapshot snapshot)
@@ -198,35 +250,31 @@ public partial class MainWindow : Window
         if (snapshot.StartupAgeSeconds < 900 && snapshot.BusyPercent >= snapshot.TriggerPercent)
         {
             SystemDiagnosisText.Text = Loc.F(LK.SystemDiagnosisStartupFormat, snapshot.StartupAgeSeconds / 60.0);
-            SystemDiagnosisText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x92, 0x40, 0x0E));
+            SystemDiagnosisText.Foreground = (Brush)FindResource("WarningBrush");
         }
         else if (snapshot.SystemOccupancyPercent >= 5 || snapshot.SystemCpuPercent >= 5)
         {
             SystemDiagnosisText.Text = Loc.F(LK.SystemDiagnosisActiveFormat,
                 snapshot.SystemOccupancyPercent, systemRate, snapshot.SystemCpuPercent);
-            SystemDiagnosisText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xB9, 0x1C, 0x1C));
+            SystemDiagnosisText.Foreground = (Brush)FindResource("DangerBrush");
         }
         else
         {
             SystemDiagnosisText.Text = Loc.T(LK.SystemDiagnosisIdle);
-            SystemDiagnosisText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x6B, 0x72, 0x80));
+            SystemDiagnosisText.Foreground = (Brush)FindResource("MutedBrush");
         }
 
         StateText.Text = snapshot.StateText;
-        StateBadge.Background = snapshot.StateKind switch
+        StateBadge.Background = (Brush)FindResource(snapshot.StateKind switch
         {
-            "throttled" => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xFE, 0xE2, 0xE2)),
-            "watch" => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xFE, 0xF3, 0xC7)),
-            "paused" => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xE5, 0xE7, 0xEB)),
-            _ => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xE8, 0xF1, 0xFF))
-        };
-        StateText.Foreground = snapshot.StateKind switch
+            "throttled" => "DangerBackground", "watch" => "WatchBackground",
+            "paused" => "PausedBackground", _ => "ActiveBackground"
+        });
+        StateText.Foreground = (Brush)FindResource(snapshot.StateKind switch
         {
-            "throttled" => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xB9, 0x1C, 0x1C)),
-            "watch" => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xB4, 0x53, 0x09)),
-            "paused" => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x4B, 0x55, 0x63)),
-            _ => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x1D, 0x4E, 0xD8))
-        };
+            "throttled" => "DangerBrush", "watch" => "WatchBrush",
+            "paused" => "PausedBrush", _ => "ActiveBrush"
+        });
 
         if (snapshot.ActivePid > 0)
         {
@@ -311,7 +359,11 @@ public partial class MainWindow : Window
 
     private void OnLogEntry(LogEntry entry)
     {
-        Dispatcher.BeginInvoke(() => AddLog(entry));
+        if (!_uiPaintEnabled || !_logListVisible) return;
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+        {
+            if (_uiPaintEnabled && _logListVisible) AddLog(entry);
+        }));
     }
 
     private void AddLog(LogEntry entry)
@@ -650,6 +702,7 @@ public partial class MainWindow : Window
         UpdateSystemControlAvailability();
         SystemControlsStatusText.Text = Loc.T(LK.StatusRefreshing);
         DefenderStatusText.Text = Loc.T(LK.StatusRefreshing);
+        SystemStartupStatusText.Text = Loc.T(LK.StatusRefreshing);
 
         try
         {
@@ -671,19 +724,31 @@ public partial class MainWindow : Window
                 }
             }
 
-            var data = await Task.Run(() => (
-                Services: ServiceControlService.QueryAll(),
-                Defender: DefenderService.GetStatus(),
-                DriveTask: ScheduledTaskService.GetStatus()));
+            if (applyRememberedPauses && !_optimizationInitialized) return;
+
+            var startupTask = Task.Run(SystemStartupService.GetStatus);
+            var defenderTask = Task.Run(DefenderService.GetStatus);
+            var driveTask = Task.Run(ScheduledTaskService.GetStatus);
+            await Task.WhenAll(startupTask, defenderTask, driveTask);
+            var startup = await startupTask;
+            var data = (
+                Services: ServiceControlService.FromSnapshot(startup),
+                Defender: await defenderTask,
+                DriveTask: await driveTask,
+                Startup: startup);
 
             ApplyServiceStates(data.Services);
             ApplyDefenderStatus(data.Defender);
             ApplyScheduledTaskStatus(data.DriveTask);
+            _lastSystemStartup = data.Startup;
+            RefreshSystemStartupTexts();
 
             if (!data.Defender.Available)
                 _logger.Warn("Defender status: " + data.Defender.Error);
             if (!data.DriveTask.Available)
                 _logger.Warn("ScheduledDefrag status: " + data.DriveTask.Error);
+            if (!data.Startup.Available)
+                _logger.Warn("System startup status: " + data.Startup.Error);
 
             foreach (var failure in applyFailures)
                 _logger.Warn(Loc.F(LK.MsgServiceToggleFailedFormat, failure.Name, failure.Message));
@@ -693,6 +758,9 @@ public partial class MainWindow : Window
             string message = Loc.F(LK.StatusRefreshFailedFormat, ex.Message);
             SystemControlsStatusText.Text = message;
             DefenderStatusText.Text = message;
+            SystemStartupRows.Clear();
+            _lastSystemStartup = null;
+            SystemStartupStatusText.Text = message;
             DefenderStatusText.Foreground = (Brush)FindResource("DangerBrush");
             _logger.Warn(message);
         }
@@ -700,6 +768,71 @@ public partial class MainWindow : Window
         {
             _systemControlsBusy = false;
             UpdateSystemControlAvailability();
+        }
+    }
+
+    private void RefreshSystemStartupTexts()
+    {
+        SystemStartupRows.Clear();
+        if (_lastSystemStartup is not { } status)
+        {
+            SystemStartupStatusText.Text = _systemControlsBusy ? Loc.T(LK.StatusRefreshing) : "--";
+            return;
+        }
+        if (!status.Available)
+        {
+            SystemStartupStatusText.Text = Loc.F(LK.StatusRefreshFailedFormat, status.Error);
+            SystemStartupStatusText.Foreground = (Brush)FindResource("DangerBrush");
+            return;
+        }
+
+        foreach (var item in status.Items) SystemStartupRows.Add(new SystemStartupRowVm(item));
+        int automatic = status.Items.Count(x => x.Exists && x.StartMode == "Auto");
+        int running = status.Items.Count(x => x.Exists && x.State == "Running");
+        int stopped = status.Items.Count(x => x.Exists && x.State == "Stopped");
+        SystemStartupStatusText.Text = Loc.F(LK.SystemStartupSummaryFormat, automatic, running, status.Items.Count, stopped);
+        SystemStartupStatusText.Foreground = (Brush)FindResource("MutedBrush");
+    }
+
+    private async void OnPauseIndexingClicked(object sender, RoutedEventArgs e)
+    {
+        if (_systemControlsBusy) return;
+        if (!ElevationService.IsElevated)
+        {
+            ShowAdminRequired(LK.MsgServicesNeedsAdmin);
+            return;
+        }
+
+        _systemControlsBusy = true;
+        UpdateSystemControlAvailability();
+        try
+        {
+            var results = await Task.Run(() => new[] { "SysMain", "WSearch" }
+                .Select(name => (Name: name, Result: ServiceControlService.SetRunning(name, false)))
+                .ToArray());
+            var errors = new List<string>();
+            foreach (var result in results)
+            {
+                if (result.Result.Ok)
+                {
+                    RememberServicePause(result.Name, paused: true);
+                    _logger.Info(Loc.F(LK.LogServiceToggleFormat, result.Name, result.Result.Message));
+                }
+                else
+                {
+                    string message = Loc.F(LK.MsgServiceToggleFailedFormat, result.Name, result.Result.Message);
+                    errors.Add(message);
+                    _logger.Warn(message);
+                }
+            }
+            if (errors.Count > 0)
+                System.Windows.MessageBox.Show(string.Join(Environment.NewLine, errors), Loc.T(LK.AppTitle),
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally
+        {
+            _systemControlsBusy = false;
+            await RefreshSystemControlsAsync(applyRememberedPauses: false);
         }
     }
 
@@ -711,9 +844,10 @@ public partial class MainWindow : Window
         _updatingSystemControls = true;
         try
         {
-            foreach (var pair in _serviceToggles)
+            foreach (var pair in _serviceOptions)
             {
-                pair.Value.IsChecked = states.TryGetValue(pair.Key, out ServiceProbe state) && state.Running;
+                states.TryGetValue(pair.Key, out ServiceProbe state);
+                pair.Value.ApplyState(state, _systemControlsBusy);
             }
         }
         finally
@@ -784,7 +918,7 @@ public partial class MainWindow : Window
         else
         {
             int running = _lastServiceStates.Values.Count(x => x.Exists && x.Running);
-            int stopped = _lastServiceStates.Values.Count(x => x.Exists && !x.Running);
+            int stopped = _lastServiceStates.Values.Count(x => x.Exists && x.StateCode == 1);
             SystemControlsStatusText.Text = Loc.F(LK.ServiceSummaryFormat, running, stopped);
             SystemControlsStatusText.Foreground = (Brush)FindResource("MutedBrush");
         }
@@ -814,11 +948,10 @@ public partial class MainWindow : Window
     private void UpdateSystemControlAvailability()
     {
         bool ready = !_systemControlsBusy;
-        foreach (var pair in _serviceToggles)
+        foreach (var pair in _serviceOptions)
         {
-            pair.Value.IsEnabled = ready &&
-                                  _lastServiceStates.TryGetValue(pair.Key, out ServiceProbe state) &&
-                                  state.Exists;
+            _lastServiceStates.TryGetValue(pair.Key, out ServiceProbe state);
+            pair.Value.ApplyState(state, _systemControlsBusy);
         }
 
         bool defenderReady = ready && _lastDefenderStatus?.Available == true;
@@ -829,8 +962,9 @@ public partial class MainWindow : Window
         DefenderCpuLimitCombo.IsEnabled = defenderReady;
         DefenderLowImpactButton.IsEnabled = defenderReady;
         ScheduledDefragCheck.IsEnabled = ready && _lastScheduledTaskStatus.Available;
-        RefreshDefenderButton.IsEnabled = ready;
-        RefreshServicesButton.IsEnabled = ready;
+        RefreshSystemStartupButton.IsEnabled = ready;
+        PauseIndexingButton.IsEnabled = ready && new[] { "SysMain", "WSearch" }
+            .Any(name => _lastServiceStates.TryGetValue(name, out var service) && service.Exists && service.Running);
     }
 
     private async void OnServiceToggleClicked(object sender, RoutedEventArgs e)

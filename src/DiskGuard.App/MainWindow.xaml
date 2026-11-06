@@ -2,25 +2,37 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:DiskGuard.App.Localization"
+        xmlns:po="http://schemas.microsoft.com/winfx/2006/xaml/presentation/options"
         Title="DiskGuard" Height="760" Width="1100" MinHeight="640" MinWidth="960"
         FontFamily="Microsoft YaHei UI, Segoe UI" FontSize="13" Background="#F3F5F9"
-        WindowStartupLocation="CenterScreen" Closing="OnWindowClosing">
+        UseLayoutRounding="True" SnapsToDevicePixels="True" TextOptions.TextFormattingMode="Display"
+        WindowStartupLocation="CenterScreen" Closing="OnWindowClosing"
+        IsVisibleChanged="OnWindowVisibilityChanged" StateChanged="OnWindowStateChanged">
 
     <Window.Resources>
-        <SolidColorBrush x:Key="DangerBrush" Color="#B91C1C" />
-        <SolidColorBrush x:Key="SuccessBrush" Color="#047857" />
-        <SolidColorBrush x:Key="MutedBrush" Color="#6B7280" />
+        <!-- Hallmark: native utility workbench; existing system fonts, blue accent, restrained rules. -->
+        <SolidColorBrush x:Key="DangerBrush" Color="#B91C1C" po:Freeze="True" />
+        <SolidColorBrush x:Key="SuccessBrush" Color="#047857" po:Freeze="True" />
+        <SolidColorBrush x:Key="MutedBrush" Color="#6B7280" po:Freeze="True" />
+        <SolidColorBrush x:Key="WarningBrush" Color="#92400E" po:Freeze="True" />
+        <SolidColorBrush x:Key="WatchBrush" Color="#B45309" po:Freeze="True" />
+        <SolidColorBrush x:Key="PausedBrush" Color="#4B5563" po:Freeze="True" />
+        <SolidColorBrush x:Key="ActiveBrush" Color="#1D4ED8" po:Freeze="True" />
+        <SolidColorBrush x:Key="DangerBackground" Color="#FEE2E2" po:Freeze="True" />
+        <SolidColorBrush x:Key="WatchBackground" Color="#FEF3C7" po:Freeze="True" />
+        <SolidColorBrush x:Key="PausedBackground" Color="#E5E7EB" po:Freeze="True" />
+        <SolidColorBrush x:Key="ActiveBackground" Color="#E8F1FF" po:Freeze="True" />
 
         <Style x:Key="Card" TargetType="Border">
             <Setter Property="Background" Value="White" />
             <Setter Property="BorderBrush" Value="#E3E7EF" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="10" />
-            <Setter Property="Padding" Value="16,12" />
+            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="Padding" Value="18,16" />
             <Setter Property="Margin" Value="0,0,0,12" />
         </Style>
         <Style x:Key="SectionTitle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontSize" Value="15" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Foreground" Value="#111827" />
             <Setter Property="VerticalAlignment" Value="Center" />
@@ -39,6 +51,7 @@
 
         <Style x:Key="ActionButton" TargetType="Button">
             <Setter Property="Padding" Value="13,6" />
+            <Setter Property="MinHeight" Value="30" />
             <Setter Property="Background" Value="#F8FAFC" />
             <Setter Property="BorderBrush" Value="#D7DCE5" />
             <Setter Property="BorderThickness" Value="1" />
@@ -49,7 +62,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="5" Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True" />
                         </Border>
                         <ControlTemplate.Triggers>
@@ -58,6 +71,9 @@
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="Chrome" Property="Opacity" Value="0.72" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="#2563EB" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="Chrome" Property="Opacity" Value="0.45" />
@@ -79,6 +95,126 @@
             <Setter Property="FontSize" Value="12" />
         </Style>
 
+        <Style TargetType="TabItem">
+            <Setter Property="Padding" Value="18,10" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <!-- TabPanel removes outer margins from its arrange slot; keep the gap inside the template. -->
+                        <Border x:Name="TabChrome" Background="Transparent" BorderBrush="Transparent" BorderThickness="1"
+                                Margin="0,0,6,0" CornerRadius="5" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter x:Name="TabHeader" ContentSource="Header" HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.FontWeight="Normal" TextElement.Foreground="#536174" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="TabChrome" Property="Background" Value="#E9EDF3" /></Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="TabChrome" Property="Background" Value="White" />
+                                <Setter TargetName="TabChrome" Property="BorderBrush" Value="#D7DDE6" />
+                                <Setter TargetName="TabHeader" Property="TextElement.Foreground" Value="#1D4ED8" /><Setter TargetName="TabHeader" Property="TextElement.FontWeight" Value="SemiBold" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="TabChrome" Property="BorderBrush" Value="#2563EB" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="TabControl">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabControl">
+                        <DockPanel KeyboardNavigation.TabNavigation="Local">
+                            <TabPanel IsItemsHost="True" DockPanel.Dock="Top" Margin="0,0,0,10" />
+                            <ContentPresenter x:Name="PART_SelectedContentHost" ContentSource="SelectedContent" />
+                        </DockPanel>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="DataGrid">
+            <Setter Property="HorizontalGridLinesBrush" Value="#EEF0F4" />
+            <Setter Property="VerticalGridLinesBrush" Value="Transparent" />
+            <Setter Property="EnableRowVirtualization" Value="True" />
+            <Setter Property="EnableColumnVirtualization" Value="True" />
+            <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
+            <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
+            <Setter Property="RowHeaderWidth" Value="0" />
+            <Setter Property="BorderBrush" Value="#E3E7EF" />
+        </Style>
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Padding" Value="9,10" /><Setter Property="Background" Value="#F4F6F9" />
+            <Setter Property="Foreground" Value="#536174" /><Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="BorderBrush" Value="#E3E7EF" /><Setter Property="BorderThickness" Value="0,0,0,1" />
+        </Style>
+        <Style TargetType="DataGridCell">
+            <Setter Property="BorderThickness" Value="0" /><Setter Property="Padding" Value="7,5" />
+        </Style>
+        <Style TargetType="ProgressBar">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ProgressBar">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="3">
+                            <Grid x:Name="PART_Track">
+                                <Border x:Name="PART_Indicator" HorizontalAlignment="Left" Background="{TemplateBinding Foreground}" CornerRadius="3" />
+                            </Grid>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Padding" Value="10,7" />
+            <Setter Property="Foreground" Value="#253047" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="OptionChrome" Background="Transparent" Padding="{TemplateBinding Padding}" CornerRadius="3">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="OptionChrome" Property="Background" Value="#EEF3FC" /></Trigger>
+                            <Trigger Property="IsSelected" Value="True"><Setter Property="Foreground" Value="#1D4ED8" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="MinHeight" Value="32" /><Setter Property="Background" Value="White" />
+            <Setter Property="BorderBrush" Value="#D7DDE6" /><Setter Property="Foreground" Value="#253047" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <Border x:Name="ComboChrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="5" />
+                            <ToggleButton Focusable="False" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                                <ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border Background="Transparent" /></ControlTemplate></ToggleButton.Template>
+                            </ToggleButton>
+                            <ContentPresenter Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}" Margin="10,3,30,3"
+                                              VerticalAlignment="Center" IsHitTestVisible="False" />
+                            <Path Data="M 0 0 L 4 4 L 8 0" Stroke="#64748B" StrokeThickness="1.2" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0" IsHitTestVisible="False" />
+                            <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" PopupAnimation="None" Focusable="False">
+                                <Border Background="White" BorderBrush="#D7DDE6" BorderThickness="1" CornerRadius="5" Padding="3" MinWidth="{TemplateBinding ActualWidth}" Margin="0,3,0,0">
+                                    <ScrollViewer MaxHeight="{TemplateBinding MaxDropDownHeight}" CanContentScroll="True">
+                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" />
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ComboChrome" Property="BorderBrush" Value="#A5B3C5" /></Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="ComboChrome" Property="BorderBrush" Value="#2563EB" /></Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter TargetName="ComboChrome" Property="Opacity" Value="0.5" /><Setter Property="Opacity" Value="0.6" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="ToggleSwitch" TargetType="CheckBox">
             <Setter Property="Width" Value="46" />
             <Setter Property="Height" Value="26" />
@@ -92,30 +228,13 @@
                             <Border x:Name="Track" CornerRadius="13" Background="#D6DBE4" />
                             <Border x:Name="FocusRing" Margin="-2" CornerRadius="15" BorderBrush="#93C5FD" BorderThickness="2" Opacity="0" />
                             <Ellipse x:Name="Thumb" Width="20" Height="20" Fill="White" HorizontalAlignment="Left" Margin="3,0,0,0">
-                                <Ellipse.RenderTransform>
-                                    <TranslateTransform x:Name="ThumbTransform" X="0" />
-                                </Ellipse.RenderTransform>
                             </Ellipse>
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="Track" Property="Background" Value="#2563EB" />
-                                <Trigger.EnterActions>
-                                    <BeginStoryboard>
-                                        <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetName="ThumbTransform" Storyboard.TargetProperty="X"
-                                                             To="20" Duration="0:0:0.16" />
-                                        </Storyboard>
-                                    </BeginStoryboard>
-                                </Trigger.EnterActions>
-                                <Trigger.ExitActions>
-                                    <BeginStoryboard>
-                                        <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetName="ThumbTransform" Storyboard.TargetProperty="X"
-                                                             To="0" Duration="0:0:0.16" />
-                                        </Storyboard>
-                                    </BeginStoryboard>
-                                </Trigger.ExitActions>
+                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right" />
+                                <Setter TargetName="Thumb" Property="Margin" Value="0,0,3,0" />
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
                                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
@@ -148,9 +267,6 @@
                                     <Border x:Name="Track" CornerRadius="13" Background="#D6DBE4" />
                                     <Border x:Name="FocusRing" Margin="-2" CornerRadius="15" BorderBrush="#93C5FD" BorderThickness="2" Opacity="0" />
                                     <Ellipse x:Name="Thumb" Width="20" Height="20" Fill="White" HorizontalAlignment="Left" Margin="3,0,0,0">
-                                        <Ellipse.RenderTransform>
-                                            <TranslateTransform x:Name="ThumbTransform" X="0" />
-                                        </Ellipse.RenderTransform>
                                     </Ellipse>
                                 </Grid>
                             </Grid>
@@ -161,22 +277,8 @@
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="Track" Property="Background" Value="#2563EB" />
-                                <Trigger.EnterActions>
-                                    <BeginStoryboard>
-                                        <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetName="ThumbTransform" Storyboard.TargetProperty="X"
-                                                             To="20" Duration="0:0:0.16" />
-                                        </Storyboard>
-                                    </BeginStoryboard>
-                                </Trigger.EnterActions>
-                                <Trigger.ExitActions>
-                                    <BeginStoryboard>
-                                        <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetName="ThumbTransform" Storyboard.TargetProperty="X"
-                                                             To="0" Duration="0:0:0.16" />
-                                        </Storyboard>
-                                    </BeginStoryboard>
-                                </Trigger.ExitActions>
+                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right" />
+                                <Setter TargetName="Thumb" Property="Margin" Value="0,0,3,0" />
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
                                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
@@ -195,6 +297,16 @@
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="BorderBrush" Value="#D7DCE5" />
         </Style>
+        <DataTemplate x:Key="SystemServiceOptionTemplate">
+            <CheckBox Style="{StaticResource ToggleRow}" Tag="{Binding Name}" Click="OnServiceToggleClicked"
+                      IsChecked="{Binding IsRunning, Mode=OneWay}" IsEnabled="{Binding IsEnabled}"
+                      AutomationProperties.Name="{Binding DisplayName}" AutomationProperties.HelpText="{Binding HelpText}">
+                <StackPanel>
+                    <TextBlock Text="{Binding DisplayName}" Foreground="#374151" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding HelpText}" FontSize="12" Foreground="#6B7280" TextWrapping="Wrap" Margin="0,3,0,0" />
+                </StackPanel>
+            </CheckBox>
+        </DataTemplate>
     </Window.Resources>
 
     <DockPanel>
@@ -221,8 +333,8 @@
                             <TextBlock x:Name="StateText" Text="{Binding [StateMonitoring], Source={x:Static loc:LocSource.Instance}}" Foreground="#1D4ED8" />
                         </Border>
                     </StackPanel>
-                    <ProgressBar x:Name="BusyBar" Height="10" Margin="0,6,120,0" Maximum="100" Foreground="#2563EB" Background="#E5E7EB" />
-                    <TextBlock x:Name="DetailText" Margin="0,8,0,0" Foreground="#6B7280" Text="--" />
+                    <ProgressBar x:Name="BusyBar" Height="7" Margin="0,6,20,0" Maximum="100" Foreground="#2563EB" Background="#E5E7EB" />
+                    <TextBlock x:Name="DetailText" Margin="0,8,14,0" Foreground="#6B7280" Text="--" TextWrapping="Wrap" />
                     <TextBlock x:Name="SystemDiagnosisText" Margin="0,5,0,0" Foreground="#92400E" Text="--" TextWrapping="Wrap" />
                 </StackPanel>
 
@@ -245,9 +357,9 @@
         <Border DockPanel.Dock="Bottom" Height="32" Background="#EDF0F6" BorderBrush="#E3E7EF" BorderThickness="0,1,0,0">
             <DockPanel Margin="14,0">
                 <TextBlock x:Name="VersionText" DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="#6B7280" Margin="12,0,0,0" />
-                <Button x:Name="ElevateButton" DockPanel.Dock="Right" Content="{Binding [BtnRestartElevated], Source={x:Static loc:LocSource.Instance}}" Padding="8,2" Margin="12,4,0,4"
+                <Button x:Name="ElevateButton" DockPanel.Dock="Right" Content="{Binding [BtnRestartElevated], Source={x:Static loc:LocSource.Instance}}" MinHeight="0" Padding="8,2" Margin="12,4,0,4"
                         VerticalAlignment="Center" Click="OnElevateClicked" />
-                <Button x:Name="OpenFolderButton" DockPanel.Dock="Right" Content="{Binding [BtnOpenConfigDir], Source={x:Static loc:LocSource.Instance}}" Padding="8,2" Margin="12,4,0,4"
+                <Button x:Name="OpenFolderButton" DockPanel.Dock="Right" Content="{Binding [BtnOpenConfigDir], Source={x:Static loc:LocSource.Instance}}" MinHeight="0" Padding="8,2" Margin="12,4,0,4"
                         VerticalAlignment="Center" Click="OnOpenFolderClicked" />
                 <TextBlock x:Name="PrivilegeText" VerticalAlignment="Center" Foreground="#4B5563" Text="--" />
             </DockPanel>
@@ -268,7 +380,7 @@
                     <DataGrid x:Name="ProcessGrid" Grid.Row="1" ItemsSource="{Binding Rows}"
                               AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
                               HeadersVisibility="Column" GridLinesVisibility="Horizontal"
-                              CanUserAddRows="False" CanUserDeleteRows="False" RowHeight="28"
+                              CanUserAddRows="False" CanUserDeleteRows="False" RowHeight="34"
                               Background="White" BorderBrush="#E3E7EF" BorderThickness="1">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="{Binding [ColProcess], Source={x:Static loc:LocSource.Instance}}" Binding="{Binding Name}" Width="230" />
@@ -473,96 +585,6 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource Card}">
-                            <StackPanel>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardDefender], Source={x:Static loc:LocSource.Instance}}" />
-                                    <Button x:Name="RefreshDefenderButton" Grid.Column="1" Style="{StaticResource CompactButton}"
-                                            Content="{Binding [BtnRefreshStatus], Source={x:Static loc:LocSource.Instance}}"
-                                            Click="OnRefreshSystemControlsClicked" />
-                                </Grid>
-                                <TextBlock x:Name="DefenderStatusText" Margin="0,0,0,4" Foreground="#6B7280" Text="--" TextWrapping="Wrap" />
-                                <TextBlock Style="{StaticResource HintText}" Margin="0,0,0,8"
-                                           Text="{Binding [HintDefender], Source={x:Static loc:LocSource.Instance}}" />
-
-                                <CheckBox x:Name="DefenderRealtimeCheck" Style="{StaticResource ToggleRow}"
-                                          Click="OnDefenderRealtimeClicked"
-                                          Content="{Binding [LabelDefenderRealtime], Source={x:Static loc:LocSource.Instance}}" />
-                                <CheckBox x:Name="DefenderLowCpuCheck" Style="{StaticResource ToggleRow}"
-                                          Click="OnDefenderLowCpuClicked"
-                                          Content="{Binding [LabelDefenderLowCpu], Source={x:Static loc:LocSource.Instance}}" />
-                                <CheckBox x:Name="DefenderIdleScanCheck" Style="{StaticResource ToggleRow}"
-                                          Click="OnDefenderIdleScanClicked"
-                                          Content="{Binding [LabelDefenderIdleScan], Source={x:Static loc:LocSource.Instance}}" />
-                                <CheckBox x:Name="DefenderScheduledScanCheck" Style="{StaticResource ToggleRow}"
-                                          Click="OnDefenderScheduledScanClicked"
-                                          Content="{Binding [LabelDefenderScheduledScan], Source={x:Static loc:LocSource.Instance}}" />
-
-                                <Grid Margin="8,7,8,3">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock VerticalAlignment="Center" Foreground="#374151"
-                                               Text="{Binding [LabelDefenderCpuLimit], Source={x:Static loc:LocSource.Instance}}" />
-                                    <ComboBox x:Name="DefenderCpuLimitCombo" Grid.Column="1" Width="96"
-                                              SelectionChanged="OnDefenderCpuLimitChanged">
-                                        <ComboBoxItem Content="20%" />
-                                        <ComboBoxItem Content="30%" />
-                                        <ComboBoxItem Content="50%" />
-                                        <ComboBoxItem Content="70%" />
-                                        <ComboBoxItem Content="100%" />
-                                    </ComboBox>
-                                </Grid>
-                                <Button x:Name="DefenderLowImpactButton" HorizontalAlignment="Left" Margin="8,8,0,2"
-                                        Content="{Binding [BtnDefenderLowImpact], Source={x:Static loc:LocSource.Instance}}"
-                                        Click="OnApplyDefenderLowImpactClicked" />
-                            </StackPanel>
-                        </Border>
-
-                        <Border Style="{StaticResource Card}">
-                            <StackPanel>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardMaintenance], Source={x:Static loc:LocSource.Instance}}" />
-                                    <Button x:Name="RefreshServicesButton" Grid.Column="1" Style="{StaticResource CompactButton}"
-                                            Content="{Binding [BtnRefreshStatus], Source={x:Static loc:LocSource.Instance}}"
-                                            Click="OnRefreshSystemControlsClicked" />
-                                </Grid>
-                                <TextBlock x:Name="SystemControlsStatusText" Margin="0,0,0,4" Foreground="#6B7280" Text="--" TextWrapping="Wrap" />
-                                <TextBlock Style="{StaticResource HintText}" Margin="0,0,0,7"
-                                           Text="{Binding [HintMaintenance], Source={x:Static loc:LocSource.Instance}}" />
-
-                                <CheckBox x:Name="StopSysMainCheck" Tag="SysMain" Style="{StaticResource ToggleRow}"
-                                          Click="OnServiceToggleClicked"
-                                          Content="{Binding [LabelSysMain], Source={x:Static loc:LocSource.Instance}}" />
-                                <CheckBox x:Name="StopWSearchCheck" Tag="WSearch" Style="{StaticResource ToggleRow}"
-                                          Click="OnServiceToggleClicked"
-                                          Content="{Binding [LabelSearchIndex], Source={x:Static loc:LocSource.Instance}}" />
-                                <CheckBox x:Name="StopDoSvcCheck" Tag="DoSvc" Style="{StaticResource ToggleRow}"
-                                          Click="OnServiceToggleClicked"
-                                          Content="{Binding [LabelDeliveryOptimization], Source={x:Static loc:LocSource.Instance}}" />
-                                <CheckBox x:Name="StopWuauservCheck" Tag="wuauserv" Style="{StaticResource ToggleRow}"
-                                          Click="OnServiceToggleClicked"
-                                          Content="{Binding [LabelWindowsUpdate], Source={x:Static loc:LocSource.Instance}}" />
-                                <CheckBox x:Name="StopBitsCheck" Tag="BITS" Style="{StaticResource ToggleRow}"
-                                          Click="OnServiceToggleClicked"
-                                          Content="{Binding [LabelBits], Source={x:Static loc:LocSource.Instance}}" />
-                                <CheckBox x:Name="ScheduledDefragCheck" Style="{StaticResource ToggleRow}" Margin="0,6,0,1"
-                                          Click="OnScheduledDefragToggleClicked"
-                                          Content="{Binding [LabelScheduledDefrag], Source={x:Static loc:LocSource.Instance}}" />
-                                <TextBlock Margin="8,4,0,0" Foreground="#9CA3AF" TextWrapping="Wrap"
-                                           Text="{Binding [HintServiceToggles], Source={x:Static loc:LocSource.Instance}}" />
-                            </StackPanel>
-                        </Border>
-
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
                             <Button Style="{StaticResource PrimaryButton}" Padding="20,7"
                                     Content="{Binding [BtnSaveSettings], Source={x:Static loc:LocSource.Instance}}"
@@ -574,13 +596,121 @@
                 </ScrollViewer>
             </TabItem>
 
+            <TabItem Header="{Binding [TabOptimization], Source={x:Static loc:LocSource.Instance}}">
+                <ScrollViewer x:Name="OptimizationScroll" VerticalScrollBarVisibility="Auto" Padding="4" Loaded="OnOptimizationLoaded">
+                    <StackPanel>
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardOptimizationControls], Source={x:Static loc:LocSource.Instance}}" />
+                                <TextBlock Style="{StaticResource HintText}" Text="{Binding [HintOptimizationControls], Source={x:Static loc:LocSource.Instance}}" />
+                                <WrapPanel Margin="0,6,0,0">
+                                    <Button x:Name="PauseIndexingButton" Margin="0,4,10,4" Content="{Binding [BtnPauseIndexing], Source={x:Static loc:LocSource.Instance}}" Click="OnPauseIndexingClicked" />
+                                    <Button x:Name="DefenderLowImpactButton" Margin="0,4,10,4" Content="{Binding [BtnDefenderLowImpact], Source={x:Static loc:LocSource.Instance}}" Click="OnApplyDefenderLowImpactClicked" />
+                                    <Button x:Name="RefreshSystemStartupButton" Margin="0,4,0,4" Content="{Binding [BtnRefreshStatus], Source={x:Static loc:LocSource.Instance}}" Click="OnRefreshSystemControlsClicked" />
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,6,0">
+                                <Border Style="{StaticResource Card}">
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardMaintenance], Source={x:Static loc:LocSource.Instance}}" />
+                                <ItemsControl ItemsSource="{Binding DiskServiceOptions}" ItemTemplate="{StaticResource SystemServiceOptionTemplate}"></ItemsControl>
+                                        <CheckBox x:Name="ScheduledDefragCheck" Style="{StaticResource ToggleRow}" Margin="0,6,0,1" Click="OnScheduledDefragToggleClicked">
+                                            <TextBlock Text="{Binding [LabelScheduledDefrag], Source={x:Static loc:LocSource.Instance}}" TextWrapping="Wrap" />
+                                        </CheckBox>
+                                    </StackPanel>
+                                </Border>
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardOptionalBackground], Source={x:Static loc:LocSource.Instance}}" />
+                                <ItemsControl ItemsSource="{Binding BackgroundServiceOptions}" ItemTemplate="{StaticResource SystemServiceOptionTemplate}"></ItemsControl>
+                            </StackPanel>
+                        </Border>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Margin="6,0,0,0">
+                                <Border Style="{StaticResource Card}">
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardDefender], Source={x:Static loc:LocSource.Instance}}" />
+                                        <TextBlock Style="{StaticResource HintText}" Margin="0,0,0,8" Text="{Binding [HintDefenderCompact], Source={x:Static loc:LocSource.Instance}}"
+                                                   ToolTip="{Binding [HintDefender], Source={x:Static loc:LocSource.Instance}}" />
+                                        <CheckBox x:Name="DefenderRealtimeCheck" Style="{StaticResource ToggleRow}" Click="OnDefenderRealtimeClicked"><TextBlock Text="{Binding [LabelDefenderRealtime], Source={x:Static loc:LocSource.Instance}}" TextWrapping="Wrap" /></CheckBox>
+                                        <CheckBox x:Name="DefenderLowCpuCheck" Style="{StaticResource ToggleRow}" Click="OnDefenderLowCpuClicked"><TextBlock Text="{Binding [LabelDefenderLowCpu], Source={x:Static loc:LocSource.Instance}}" TextWrapping="Wrap" /></CheckBox>
+                                        <CheckBox x:Name="DefenderIdleScanCheck" Style="{StaticResource ToggleRow}" Click="OnDefenderIdleScanClicked"><TextBlock Text="{Binding [LabelDefenderIdleScan], Source={x:Static loc:LocSource.Instance}}" TextWrapping="Wrap" /></CheckBox>
+                                        <CheckBox x:Name="DefenderScheduledScanCheck" Style="{StaticResource ToggleRow}" Click="OnDefenderScheduledScanClicked"><TextBlock Text="{Binding [LabelDefenderScheduledScan], Source={x:Static loc:LocSource.Instance}}" TextWrapping="Wrap" /></CheckBox>
+                                        <Grid Margin="8,7,8,3">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                            <TextBlock VerticalAlignment="Center" Foreground="#374151" TextWrapping="Wrap" Text="{Binding [LabelDefenderCpuLimit], Source={x:Static loc:LocSource.Instance}}" />
+                                            <ComboBox x:Name="DefenderCpuLimitCombo" Grid.Column="1" Width="96" SelectionChanged="OnDefenderCpuLimitChanged">
+                                                <ComboBoxItem Content="20%" /><ComboBoxItem Content="30%" /><ComboBoxItem Content="50%" /><ComboBoxItem Content="70%" /><ComboBoxItem Content="100%" />
+                                            </ComboBox>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardOptionalDevices], Source={x:Static loc:LocSource.Instance}}" />
+                                <ItemsControl ItemsSource="{Binding DeviceServiceOptions}" ItemTemplate="{StaticResource SystemServiceOptionTemplate}"></ItemsControl>
+                            </StackPanel>
+                        </Border>
+                            </StackPanel>
+                        </Grid>
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardOptionalGaming], Source={x:Static loc:LocSource.Instance}}" />
+                                <ItemsControl ItemsSource="{Binding GamingServiceOptions}" ItemTemplate="{StaticResource SystemServiceOptionTemplate}">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="3" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="{Binding [CardSystemStartup], Source={x:Static loc:LocSource.Instance}}" />
+                                <TextBlock x:Name="SystemStartupStatusText" Foreground="#6B7280" Text="--" TextWrapping="Wrap" Margin="0,0,0,4" />
+                                <TextBlock x:Name="SystemControlsStatusText" Foreground="#6B7280" Text="--" TextWrapping="Wrap" Margin="0,0,0,4" />
+                                <TextBlock x:Name="DefenderStatusText" Foreground="#6B7280" Text="--" TextWrapping="Wrap" Margin="0,0,0,8" />
+                                <TextBlock Style="{StaticResource HintText}" Text="{Binding [HintSystemStartup], Source={x:Static loc:LocSource.Instance}}" Margin="0,0,0,6" />
+                                <TextBlock Style="{StaticResource HintText}" Text="{Binding [HintSystemResources], Source={x:Static loc:LocSource.Instance}}" Margin="0,0,0,10" />
+                                <DataGrid x:Name="SystemStartupGrid" ItemsSource="{Binding SystemStartupRows}" AutoGenerateColumns="False"
+                                          IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False" CanUserReorderColumns="False"
+                                          HeadersVisibility="Column" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#E5E7EB"
+                                          BorderBrush="#E5E7EB" BorderThickness="1" RowHeaderWidth="0" MinRowHeight="44" Height="420"
+                                          SelectionMode="Single" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                                    <DataGrid.Resources>
+                                        <Style x:Key="SystemStartupCell" TargetType="TextBlock">
+                                            <Setter Property="TextWrapping" Value="Wrap" /><Setter Property="VerticalAlignment" Value="Center" />
+                                            <Setter Property="Margin" Value="7,5" /><Setter Property="ToolTip" Value="{Binding ResourceDetails}" />
+                                        </Style>
+                                        <Style TargetType="DataGridColumnHeader">
+                                            <Setter Property="Padding" Value="7,7" /><Setter Property="Background" Value="#F3F5F9" />
+                                            <Setter Property="BorderBrush" Value="#E5E7EB" /><Setter Property="BorderThickness" Value="0,0,0,1" />
+                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                        </Style>
+                                    </DataGrid.Resources>
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="{Binding [ColSystemService], Source={x:Static loc:LocSource.Instance}}" Binding="{Binding Name}" ElementStyle="{StaticResource SystemStartupCell}" Width="185" />
+                                        <DataGridTextColumn Header="{Binding [ColStatus], Source={x:Static loc:LocSource.Instance}}" Binding="{Binding StateText}" ElementStyle="{StaticResource SystemStartupCell}" Width="80" />
+                                        <DataGridTextColumn Header="{Binding [ColSystemStartMode], Source={x:Static loc:LocSource.Instance}}" Binding="{Binding StartModeText}" ElementStyle="{StaticResource SystemStartupCell}" Width="105" />
+                                        <DataGridTextColumn Header="{Binding [ColSystemMemory], Source={x:Static loc:LocSource.Instance}}" Binding="{Binding MemoryText}" ElementStyle="{StaticResource SystemStartupCell}" Width="110" />
+                                        <DataGridTextColumn Header="{Binding [ColSystemIo], Source={x:Static loc:LocSource.Instance}}" Binding="{Binding IoText}" ElementStyle="{StaticResource SystemStartupCell}" Width="100" />
+                                        <DataGridTextColumn Header="{Binding [ColSystemAdvice], Source={x:Static loc:LocSource.Instance}}" Binding="{Binding AdviceText}" ElementStyle="{StaticResource SystemStartupCell}" Width="*" MinWidth="215" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <TextBlock Style="{StaticResource HintText}" Margin="0,10,0,0" Text="{Binding [HintServiceToggles], Source={x:Static loc:LocSource.Instance}}" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
             <TabItem Header="{Binding [TabLog], Source={x:Static loc:LocSource.Instance}}">
                 <Grid Margin="4">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <ListView x:Name="LogList" Grid.Row="0" ItemsSource="{Binding Logs}" Background="White"
+                    <ListView x:Name="LogList" Grid.Row="0" ItemsSource="{Binding Logs}" Background="White" IsVisibleChanged="OnLogListVisibilityChanged"
                               BorderBrush="#E3E7EF" BorderThickness="1"
                               VirtualizingPanel.IsVirtualizing="True"
                               VirtualizingPanel.VirtualizationMode="Recycling"

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/DiskGuard.Core/DiskGuard.Core.csproj" />
+    <Compile Include="../../src/DiskGuard.App/Services/SystemStartupService.cs" Link="SystemStartupService.cs" />
+    <Compile Include="../../src/DiskGuard.App/Services/SystemServiceCatalog.cs" Link="SystemServiceCatalog.cs" />
+    <Compile Include="../../src/DiskGuard.App/Services/ServiceControlService.cs" Link="ServiceControlService.cs" />
+    <Compile Include="../../src/DiskGuard.App/Services/UiRefreshGate.cs" Link="UiRefreshGate.cs" />
+    <Compile Include="../../src/DiskGuard.App/Services/PowerShellRunner.cs" Link="PowerShellRunner.cs" />
+    <Compile Include="../../src/DiskGuard.App/ViewModels/SystemStartupRowVm.cs" Link="SystemStartupRowVm.cs" />
+    <Compile Include="../../src/DiskGuard.App/ViewModels/SystemServiceOptionVm.cs" Link="SystemServiceOptionVm.cs" />
+  </ItemGroup>
+</Project>

@@ -35,14 +35,8 @@ public static class ServiceControlService
 {
     private static readonly Regex StatePattern = new(@"STATE\s*:\s*(\d+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
-    public static readonly IReadOnlyList<string> PausableServices = new[]
-    {
-        "SysMain",
-        "WSearch",
-        "DoSvc",
-        "wuauserv",
-        "BITS"
-    };
+    public static readonly IReadOnlyList<string> PausableServices = Array.AsReadOnly(
+        SystemServiceCatalog.Services.Where(service => service.CanPause).Select(service => service.Name).ToArray());
 
     public static bool IsPausable(string serviceName) =>
         PausableServices.Contains(serviceName, StringComparer.OrdinalIgnoreCase);
@@ -71,6 +65,24 @@ public static class ServiceControlService
         return result;
     }
 
+    public static IReadOnlyDictionary<string, ServiceProbe> FromSnapshot(SystemStartupStatus snapshot)
+    {
+        var result = new Dictionary<string, ServiceProbe>(StringComparer.OrdinalIgnoreCase);
+        foreach (string name in PausableServices)
+        {
+            var item = snapshot.Available ? snapshot.Items.FirstOrDefault(service =>
+                service.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) : null;
+            int stateCode = item?.State switch
+            {
+                "Stopped" => 1, "Start Pending" => 2, "Stop Pending" => 3,
+                "Running" => 4, "Continue Pending" => 5, "Pause Pending" => 6, "Paused" => 7,
+                _ => -1
+            };
+            result[name] = new ServiceProbe(name, item?.Exists == true, stateCode == 4, stateCode, snapshot.Error);
+        }
+        return result;
+    }
+
     public static ServiceControlResult SetRunning(string serviceName, bool running)
     {
         if (!IsPausable(serviceName))
@@ -79,7 +91,7 @@ public static class ServiceControlService
         var before = Query(serviceName);
         if (!before.Exists)
             return new ServiceControlResult(false, before.Detail, before);
-        if (before.Running == running)
+        if (before.StateCode == (running ? 4 : 1))
             return new ServiceControlResult(true, running ? "Already running" : "Already stopped", before);
 
         string action = running ? "start" : "stop";
