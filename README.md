@@ -1,5 +1,6 @@
 # 磁盘守护 DiskGuard
 
+[English](README.en.md) · 简体中文
 ![build](https://github.com/XiaoRui114514/DiskGuard/actions/workflows/build.yml/badge.svg)
 ![release](https://img.shields.io/github/v/release/XiaoRui114514/DiskGuard?display_name=tag&sort=semver)
 ![license](https://img.shields.io/github/license/XiaoRui114514/DiskGuard)
@@ -137,7 +138,7 @@ Windows Defender 的 MsMpEng 是受保护的系统安全服务，不能安全地
 "保护前台程序"保护的是**整个程序**：浏览器、Electron、商店应用这类多进程软件，前台窗口所在进程的父进程与所有子进程（渲染/工具进程）都会受保护，98% 单盘硬上限触发时除外。
 
 **Q: 怎么卸载？**
-退出程序 → 关闭"开机自动启动"（或删除计划任务 `DiskGuard_AutoStart`）→ 删除 exe 与 `%LOCALAPPDATA%\DiskGuard\` 目录即可。
+先还原限速，并恢复自己在“优化”页更改过的服务和 Defender 设置 → 在设置中关闭“开机自动启动”（或删除计划任务 `DiskGuard_AutoStart`）→ 完全退出 → 删除 exe。确认不再需要日志和恢复信息后，再删除 `%LOCALAPPDATA%\DiskGuard\`。
 
 ---
 
