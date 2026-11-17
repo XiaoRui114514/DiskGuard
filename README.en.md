@@ -2,7 +2,7 @@
 
 [简体中文](README.md) · English
 
-A Windows disk activity monitor and process I/O throttling tool. It samples the selected physical disk separately, identifies active process I/O, and applies priority or throughput limits to reduce contention. It cannot guarantee a disk will stay below a particular utilization level.
+A Windows disk activity monitor with process I/O priority and recovery controls. It samples the selected physical disk separately, identifies active process I/O, and can lower eligible process priorities to reduce contention. It cannot guarantee a disk will stay below a particular utilization level.
 
 ## Download and use
 
@@ -15,7 +15,9 @@ The interface supports Simplified Chinese, Traditional Chinese, English, Japanes
 ## Behavior and limits
 
 - Ordinary throttling protects the foreground application. At 98% activity on the selected disk, protection may also throttle an active foreground workload; input and desktop critical processes remain protected.
-- Priority reduction is the first stage. Supported processes can receive job-object bandwidth/IOPS limits. Sandboxed applications may reject these limits.
+- Priority reduction is the first stage; it is a scheduling hint, not a guaranteed throughput cap.
+- The level-2 bandwidth/IOPS path uses the legacy [`SetIoRateControlInformationJobObject` API](https://learn.microsoft.com/en-us/windows/win32/api/jobapi2/nf-jobapi2-setioratecontrolinformationjobobject). Microsoft marks this API unsupported on Windows 10 version 1607 and newer. Do not choose DiskGuard expecting guaranteed per-process MB/s or IOPS caps on current Windows 10/11. The source retains the legacy request path; failed requests are logged and do not establish an active cap. Sandbox/job restrictions can also reject assignment.
+- [ProcessThrottler](src/DiskGuard.Core/Throttling/ProcessThrottler.cs) applies the native request; [GuardEngine](src/DiskGuard.Core/Engine/GuardEngine.cs) handles failure. Native test success for priority/restoration is not proof of rate enforcement or an actual disk-performance benchmark.
 - Strong mode is off by default and intermittently suspends a target process; it can make that application temporarily unresponsive.
 - Kernel I/O, protected processes, driver activity and drive-internal maintenance cannot all be controlled by a user-space tool.
 - System optimization controls are separate, explicit actions. Stopping search/indexing or update services affects those features; disabling Defender real-time protection reduces security. These actions are not required to monitor a disk.
